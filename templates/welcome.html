@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>환영합니다</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background: #f5f7fa;
+      padding: 30px;
+      color: #333;
+    }
+    .container {
+      background: #ffffff;
+      max-width: 600px;
+      margin: auto;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    h2 {
+      color: #007bff;
+    }
+    .footer {
+      font-size: 12px;
+      text-align: center;
+      margin-top: 30px;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>{{full_name}} 님, 환영합니다! 🎉</h2>
+    <p>
+      Korean Tutoring에 가입해 주셔서 감사합니다.<br />
+      튜터와 학생이 함께 성장하는 공간에서, 유익한 학습 경험을 만들어 가시길 바랍니다.
+    </p>
+    <p>
+      지금 바로 로그인하여 수업을 예약해보세요.
+    </p>
+    <a href="http://localhost:3000/login" style="display:inline-block;padding:10px 20px;background:#007bff;color:white;text-decoration:none;border-radius:5px;margin-top:15px;">로그인 하기</a>
+    <div class="footer">
+      이 메일은 Korean Tutoring에서 발송되었습니다.<br/>
+      문의: support@koreantutor.com
+    </div>
+  </div>
+</body>
+</html>
