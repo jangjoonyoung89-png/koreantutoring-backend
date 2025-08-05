@@ -4,7 +4,7 @@ const Tutor = require("../models/Tutor");
 
 dotenv.config();
 
-// 🔽 로컬이 아닌 Atlas로 연결
+
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
   console.log("✅ MongoDB Atlas 연결 성공");
 

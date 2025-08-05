@@ -10,16 +10,16 @@ const nodemailer = require("nodemailer");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-
+// 토큰 생성 함수
 function generateToken(user) {
   return jwt.sign(
     { id: user._id, email: user.email, role: user.role },
-    process.env.JWT_SECRET,
+    JWT_SECRET,
     { expiresIn: '1d' }
   );
 }
 
-
+// 회원가입
 router.post("/signup", async (req, res) => {
   try {
     const { email, password, full_name, role } = req.body;
@@ -50,36 +50,43 @@ router.post("/signup", async (req, res) => {
       subject: "환영합니다! Korean Tutoring 회원가입 완료",
       html,
     });
-    
+
     res.status(201).json({ message: "회원가입 성공" });
   } catch (err) {
     res.status(500).json({ detail: "서버 오류" });
   }
 });
 
-
+// 로그인 (관리자 포함)
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ detail: "존재하지 않는 사용자입니다." });
+    if (!user)
+      return res.status(400).json({ detail: "존재하지 않는 사용자입니다." });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ detail: "비밀번호가 일치하지 않습니다." });
+    if (!isMatch)
+      return res.status(400).json({ detail: "비밀번호가 일치하지 않습니다." });
 
     const token = generateToken(user);
 
     res.json({
       message: "로그인 성공",
       token,
-      user: { email: user.email, full_name: user.full_name, role: user.role }
+      user: {
+        email: user.email,
+        full_name: user.full_name,
+        role: user.role,
+      },
     });
   } catch (err) {
     res.status(500).json({ detail: "서버 오류" });
   }
 });
 
-
+// 비밀번호 재설정 요청
 router.post("/request-reset", async (req, res) => {
   try {
     const { email } = req.body;
@@ -87,7 +94,7 @@ router.post("/request-reset", async (req, res) => {
     if (!user) return res.status(404).json({ detail: "사용자를 찾을 수 없습니다." });
 
     const token = crypto.randomBytes(32).toString("hex");
-    const expire = Date.now() + 1000 * 60 * 30;
+    const expire = Date.now() + 1000 * 60 * 30; // 30분
 
     user.resetToken = token;
     user.resetTokenExpire = expire;
@@ -106,16 +113,18 @@ router.post("/request-reset", async (req, res) => {
   }
 });
 
-
+// 비밀번호 재설정 완료
 router.post("/reset-password", async (req, res) => {
   try {
     const { token, password } = req.body;
+
     const user = await User.findOne({
       resetToken: token,
       resetTokenExpire: { $gt: Date.now() },
     });
 
-    if (!user) return res.status(400).json({ detail: "유효하지 않거나 만료된 토큰입니다." });
+    if (!user)
+      return res.status(400).json({ detail: "유효하지 않거나 만료된 토큰입니다." });
 
     const hashed = await bcrypt.hash(password, 10);
     user.password = hashed;
@@ -130,22 +139,37 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
+// 백업용: /forgot-password (사용 안 함, 필요 시 활성화)
 router.post("/forgot-password", async (req, res) => {
-  const { email } = req.body;
-  const user = await User.findOne({ email });
-  if (!user) return res.status(404).json({ message: "해당 이메일을 찾을 수 없습니다." });
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user)
+      return res.status(404).json({ message: "해당 이메일을 찾을 수 없습니다." });
 
-  const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "1h" });
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "1h" });
 
-  const resetLink = `http://localhost:3000/reset-password/${token}`;
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: "비밀번호 재설정 링크",
-    html: `<p>아래 링크를 클릭해 비밀번호를 재설정하세요.</p><a href="${resetLink}">${resetLink}</a>`,
-  });
+    const resetLink = `http://localhost:3000/reset-password/${token}`;
 
-  res.json({ message: "비밀번호 재설정 링크가 이메일로 전송되었습니다." });
+    const transporter = nodemailer.createTransport({
+      service: "Gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "비밀번호 재설정 링크",
+      html: `<p>아래 링크를 클릭해 비밀번호를 재설정하세요.</p><a href="${resetLink}">${resetLink}</a>`,
+    });
+
+    res.json({ message: "비밀번호 재설정 링크가 이메일로 전송되었습니다." });
+  } catch (err) {
+    res.status(500).json({ detail: "서버 오류" });
+  }
 });
 
 module.exports = router;

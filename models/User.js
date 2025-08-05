@@ -4,7 +4,7 @@ const userSchema = new mongoose.Schema({
   full_name: { type: String, required: true }, 
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  role: { type: String, enum: ['student', 'tutor'], required: true }, 
+  role: { type: String, enum: ['student', 'tutor', 'admin'], required: true }, 
   
   resetToken: String,
   resetTokenExpire: Date,

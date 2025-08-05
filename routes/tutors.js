@@ -2,9 +2,9 @@ const express = require("express");
 const router = express.Router();
 const Tutor = require("../models/Tutor");
 const Review = require("../models/Review");
+const Booking = require("../models/Booking"); 
 const multer = require("multer");
 const path = require("path");
-
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -17,7 +17,43 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// 고정 경로 우선 정의
+// ✅ 더미 튜터 등록 API
+router.post("/dummy", async (req, res) => {
+  try {
+    const dummyTutors = [
+      {
+        name: "홍길동",
+        email: "hong@test.com",
+        bio: "10년 경력의 한국어 전문 튜터입니다.",
+        languages: ["한국어", "영어"],
+        hourlyRate: 25000,
+        availableTimes: [
+          { day: "월요일", start: "10:00", end: "12:00" },
+          { day: "수요일", start: "14:00", end: "16:00" },
+        ],
+      },
+      {
+        name: "김영희",
+        email: "kim@test.com",
+        bio: "초보자에게 맞춘 수업을 제공합니다.",
+        languages: ["한국어", "일본어"],
+        hourlyRate: 20000,
+        availableTimes: [
+          { day: "화요일", start: "13:00", end: "15:00" },
+          { day: "금요일", start: "09:00", end: "11:00" },
+        ],
+      },
+    ];
+
+    await Tutor.insertMany(dummyTutors);
+    res.status(201).json({ message: "더미 튜터 등록 완료" });
+  } catch (err) {
+    console.error("더미 튜터 추가 오류:", err);
+    res.status(500).json({ error: "더미 추가 실패" });
+  }
+});
+
+/** 튜터 목록 + 평점 */
 router.get("/with-rating", async (req, res) => {
   try {
     const tutors = await Tutor.find();
@@ -45,6 +81,7 @@ router.get("/with-rating", async (req, res) => {
   }
 });
 
+/** 튜터의 평균 평점 단일 조회 */
 router.get("/tutor/:tutorId/average", async (req, res) => {
   const { tutorId } = req.params;
 
@@ -64,7 +101,26 @@ router.get("/tutor/:tutorId/average", async (req, res) => {
   }
 });
 
-// 비디오 업로드 라우터
+/** 수업 시작 시간 확인 (버튼 활성화용) */
+router.post("/check-start-time", async (req, res) => {
+  const { bookingId } = req.body;
+
+  try {
+    const booking = await Booking.findById(bookingId);
+    if (!booking) return res.status(404).json({ detail: "예약 정보 없음" });
+
+    const startTime = new Date(booking.startTime);
+    const now = new Date();
+
+    const canStart = now >= startTime;
+    res.json({ canStart });
+  } catch (err) {
+    console.error("수업 시작 시간 확인 오류:", err);
+    res.status(500).json({ detail: "서버 오류" });
+  }
+});
+
+/** 비디오 업로드 */
 router.post("/:id/upload-video", upload.single("video"), async (req, res) => {
   const { tutorId } = req.body;
   if (!req.file) return res.status(400).json({ error: "파일 없음" });
@@ -83,7 +139,7 @@ router.post("/:id/upload-video", upload.single("video"), async (req, res) => {
   }
 });
 
-// 튜터 목록 조회 (/:id 경로보다 위에 위치)
+/** 튜터 목록 조회 */
 router.get("/", async (req, res) => {
   try {
     console.log("튜터 목록 요청 들어옴");
@@ -96,7 +152,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// 튜터 상세 조회
+/** 튜터 상세 조회 */
 router.get("/:id", async (req, res) => {
   try {
     const tutor = await Tutor.findById(req.params.id);
@@ -108,7 +164,7 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// 튜터 가능 시간 수정
+/** 튜터 가능 시간 수정 */
 router.patch("/:id/availability", async (req, res) => {
   const { id } = req.params;
   const { availableTimes } = req.body;
@@ -123,7 +179,7 @@ router.patch("/:id/availability", async (req, res) => {
   }
 });
 
-// 튜터 가능 시간 조회
+/** 튜터 가능 시간 조회 */
 router.get("/:id/availability", async (req, res) => {
   try {
     const tutor = await Tutor.findById(req.params.id);
@@ -135,6 +191,7 @@ router.get("/:id/availability", async (req, res) => {
   }
 });
 
+/** 튜터 등록 */
 router.post("/", async (req, res) => {
   try {
     const newTutor = new Tutor(req.body);

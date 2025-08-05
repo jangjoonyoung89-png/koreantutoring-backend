@@ -5,14 +5,15 @@ const tutorSchema = new mongoose.Schema({
   bio: { type: String },
   availableTimes: [
     {
-      day: { type: String },             // 예: "Monday"
-      slots: [{ type: String }],         // 예: ["10:00", "11:00"]
+      day: { type: String },             
+      slots: [{ type: String }],         
     },
   ],
   
   price: Number,
   photo: String,
   email: String,
+  approved: { type: Boolean, default: false },
 
   sampleVideoUrl: { type: String, default: "" },
 
