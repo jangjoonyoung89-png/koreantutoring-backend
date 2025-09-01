@@ -4,33 +4,33 @@ const Tutor = require("../models/Tutor");
 const multer = require("multer");
 const path = require("path");
 
-
+// multer 설정: uploads/videos 폴더에 저장, 파일명은 타임스탬프 + 필드명 + 확장자
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/videos/"); 
+  destination: (req, file, cb) => {
+    cb(null, "uploads/videos/");
   },
-  filename: function (req, file, cb) {
+  filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
     cb(null, `${Date.now()}_${file.fieldname}${ext}`);
   },
 });
-const upload = multer({ storage: storage });
+const upload = multer({ storage });
 
-
+// 튜터 샘플 영상 업로드 API
 router.post("/:id/upload-video", upload.single("video"), async (req, res) => {
   try {
     const tutorId = req.params.id;
-    const videoPath = req.file ? `/uploads/videos/${req.file.filename}` : null;
-    if (!videoPath) {
+    if (!req.file) {
       return res.status(400).json({ detail: "비디오 파일이 필요합니다." });
     }
 
+    const videoPath = `/uploads/videos/${req.file.filename}`;
     const tutor = await Tutor.findById(tutorId);
     if (!tutor) {
       return res.status(404).json({ detail: "튜터를 찾을 수 없습니다." });
     }
 
-    tutor.sampleVideoUrl = videoPath; 
+    tutor.sampleVideoUrl = videoPath;
     await tutor.save();
 
     res.json({ message: "샘플 영상 업로드 성공", videoUrl: videoPath });

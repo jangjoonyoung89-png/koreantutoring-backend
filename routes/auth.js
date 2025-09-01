@@ -4,9 +4,10 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const fs = require("fs");
+const nodemailer = require("nodemailer");
+
 const User = require("../models/User");
 const sendEmail = require("../utils/sendEmail");
-const nodemailer = require("nodemailer");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -15,7 +16,7 @@ function generateToken(user) {
   return jwt.sign(
     { id: user._id, email: user.email, role: user.role },
     JWT_SECRET,
-    { expiresIn: '1d' }
+    { expiresIn: "1d" }
   );
 }
 
@@ -34,8 +35,10 @@ router.post("/signup", async (req, res) => {
     const user = new User({ email, password: hashedPassword, full_name, role });
     await user.save();
 
-    const html = fs.readFileSync("templates/welcome.html", "utf-8")
-      .replace("{{full_name}}", user.full_name);
+    const html = fs.readFileSync("templates/welcome.html", "utf-8").replace(
+      "{{full_name}}",
+      user.full_name
+    );
 
     const transporter = nodemailer.createTransport({
       service: "Gmail",
@@ -53,6 +56,7 @@ router.post("/signup", async (req, res) => {
 
     res.status(201).json({ message: "회원가입 성공" });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ detail: "서버 오류" });
   }
 });
@@ -82,6 +86,7 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ detail: "서버 오류" });
   }
 });
@@ -101,7 +106,8 @@ router.post("/request-reset", async (req, res) => {
     await user.save();
 
     const resetLink = `http://localhost:3000/reset-password?token=${token}`;
-    const htmlTemplate = fs.readFileSync("templates/reset-password.html", "utf-8")
+    const htmlTemplate = fs
+      .readFileSync("templates/reset-password.html", "utf-8")
       .replace("{{full_name}}", user.full_name || user.email)
       .replace("{{resetLink}}", resetLink);
 
@@ -109,6 +115,7 @@ router.post("/request-reset", async (req, res) => {
 
     res.json({ message: "비밀번호 재설정 링크가 이메일로 전송되었습니다." });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ detail: "서버 오류" });
   }
 });
@@ -135,40 +142,8 @@ router.post("/reset-password", async (req, res) => {
 
     res.json({ message: "비밀번호가 성공적으로 변경되었습니다." });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ detail: "서버 오류가 발생했습니다." });
-  }
-});
-
-// 백업용: /forgot-password (사용 안 함, 필요 시 활성화)
-router.post("/forgot-password", async (req, res) => {
-  try {
-    const { email } = req.body;
-    const user = await User.findOne({ email });
-    if (!user)
-      return res.status(404).json({ message: "해당 이메일을 찾을 수 없습니다." });
-
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "1h" });
-
-    const resetLink = `http://localhost:3000/reset-password/${token}`;
-
-    const transporter = nodemailer.createTransport({
-      service: "Gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: "비밀번호 재설정 링크",
-      html: `<p>아래 링크를 클릭해 비밀번호를 재설정하세요.</p><a href="${resetLink}">${resetLink}</a>`,
-    });
-
-    res.json({ message: "비밀번호 재설정 링크가 이메일로 전송되었습니다." });
-  } catch (err) {
-    res.status(500).json({ detail: "서버 오류" });
   }
 });
 
