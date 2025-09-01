@@ -210,14 +210,11 @@ app.get("/tutor-only-data", authenticateToken, authorizeRoles("tutor"), (req, re
 });
 
 /** ======================
- * React SPA 정적 파일 서빙
+ * 루트 라우트 (Render 확인용)
  * ====================== */
-const frontendPath = path.resolve(__dirname, "../frontend/build");
-app.use(express.static(frontendPath));
-app.get(
-  /^(?!\/api|\/auth|\/payments|\/bookings|\/profile|\/availability|\/my-bookings|\/admin|\/tutor-verification|\/uploads|\/videos).*/,
-  (req, res) => res.sendFile(path.join(frontendPath, "index.html"))
-);
+app.get("/", (req, res) => {
+  res.send("✅ Backend API is running 🚀");
+});
 
 /** ======================
  * MongoDB 연결 및 서버 실행
