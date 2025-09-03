@@ -35,6 +35,8 @@ app.use((req, res, next) => {
  * ====================== */
 const allowedOrigins = [
   process.env.FRONTEND_URL || "https://koreantutoring-frontend.onrender.com",
+  "https://www.koreantutoring.co.kr",
+  "https://api.koreantutoring.co.kr",
   "http://localhost:3000",
   "http://localhost:3002",
 ];
