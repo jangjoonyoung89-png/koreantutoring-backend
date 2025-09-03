@@ -155,42 +155,12 @@ app.use("/availability", availabilityRoutes);
 app.use("/my-bookings", studentBookingRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/admin", adminRoutes);
-app.use("/api/tutors", tutorRoutes); // ← 핵심 라우터
+app.use("/api/tutors", tutorRoutes); // ✅ DB 정상 연결 시 tutors.js 사용
 app.use("/api/materials", materialBoardRoutes);
 app.use("/tutor-verification", tutorVerificationRoutes);
 
 /** ======================
- * 튜터 목록 API (DB → 샘플 데이터 fallback)
- * ====================== */
-app.get("/api/tutors", async (req, res) => {
-  try {
-    const tutors = await Tutor.find();
-    if (!tutors || tutors.length === 0) throw new Error("튜터 없음");
-    return res.json(tutors);
-  } catch (err) {
-    console.warn("DB에서 튜터 로드 실패 → 샘플 데이터 사용");
-    return res.json(sampleTutors);
-  }
-});
-
-/** ======================
- * 튜터 상세 조회 API
- * ====================== */
-app.get("/api/tutors/:id", async (req, res) => {
-  try {
-    const tutor = await Tutor.findById(req.params.id);
-    if (!tutor) throw new Error("튜터 없음");
-    res.json(tutor);
-  } catch (err) {
-    console.warn("DB에서 튜터 로드 실패 → 샘플 데이터 사용");
-    const sampleTutor = sampleTutors.find((t) => String(t._id) === String(req.params.id));
-    if (sampleTutor) return res.json(sampleTutor);
-    return res.status(404).json({ error: "튜터를 찾을 수 없습니다." });
-  }
-});
-
-/** ======================
- * 예약 관련 API
+ * 예약 관련 API (테스트용)
  * ====================== */
 app.get("/api/tutors/:id/available-dates", (req, res) => {
   res.json(["2025-08-16", "2025-08-17", "2025-08-18"]);
@@ -221,6 +191,8 @@ app.get("/", (req, res) => {
 /** ======================
  * MongoDB 연결 및 서버 실행
  * ====================== */
+let dbConnected = false;
+
 mongoose
   .connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
@@ -229,13 +201,37 @@ mongoose
   })
   .then(() => {
     console.log("✅ MongoDB 연결 성공");
+    dbConnected = true;
     const PORT = process.env.PORT || 8000;
     server.listen(PORT, () => console.log(`✅ 서버 실행 중: 포트 ${PORT}`));
   })
   .catch((err) => {
     console.error("❌ MongoDB 연결 실패:", err.message);
+    dbConnected = false;
     const PORT = process.env.PORT || 8000;
     server.listen(PORT, () =>
       console.log(`⚠️ DB 연결 실패 → 샘플 데이터 모드로 포트 ${PORT} 실행`)
     );
   });
+
+/** ======================
+ * DB 연결 실패 시 fallback API
+ * ====================== */
+app.get("/api/tutors", async (req, res) => {
+  if (!dbConnected) {
+    console.log("⚠️ DB 연결 안 됨 → 샘플 튜터 반환");
+    return res.json(sampleTutors);
+  }
+  try {
+    const tutors = await Tutor.find();
+    res.json(tutors);
+  } catch (err) {
+    console.error("❌ 튜터 조회 실패:", err);
+    res.status(500).json({ error: "튜터 불러오기 실패" });
+  }
+});
+
+/** ======================
+ * export
+ * ====================== */
+module.exports = { app, server, sampleTutors, Tutor };

@@ -1,11 +1,15 @@
 const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
+const multer = require("multer");
+const path = require("path");
+
+// ----------------------
+// 모델
+// ----------------------
 const Tutor = require("../models/Tutor");
 const Review = require("../models/Review");
 const Booking = require("../models/Booking");
-const multer = require("multer");
-const path = require("path");
 
 // ----------------------
 // ObjectId 유효성 검사
@@ -73,8 +77,8 @@ const sampleTutors = [
 // ----------------------
 router.post("/dummy", async (req, res) => {
   try {
-    const existingCount = await Tutor.countDocuments();
-    if (existingCount > 0)
+    const count = await Tutor.countDocuments();
+    if (count > 0)
       return res.status(400).json({ error: "더미 데이터가 이미 존재합니다." });
 
     await Tutor.insertMany(sampleTutors);
@@ -86,33 +90,43 @@ router.post("/dummy", async (req, res) => {
 });
 
 // ----------------------
-// 전체 튜터 조회 (추천 + 평점 포함)
+// 전체 튜터 조회 (평점 포함)
 // ----------------------
 router.get("/", async (req, res) => {
   try {
-    let tutors = await Tutor.find({ approved: true }).lean();
-
-    // DB에 데이터 없으면 샘플 fallback
-    if (!tutors || tutors.length === 0) tutors = sampleTutors;
-
-    // 평점 포함
-    for (let tutor of tutors) {
-      const reviews = await Review.find({ tutor: tutor._id });
-      tutor.averageRating =
-        reviews.length > 0
-          ? Number((reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1))
-          : null;
+    let tutors = [];
+    try {
+      tutors = await Tutor.find({ approved: true }).lean();
+    } catch (dbErr) {
+      console.warn("⚠️ DB 연결 실패 → 샘플 데이터 반환", dbErr.message);
+      tutors = sampleTutors;
     }
+
+    // 평점 계산
+    tutors = await Promise.all(
+      tutors.map(async (tutor) => {
+        try {
+          const reviews = await Review.find({ tutor: tutor._id });
+          const averageRating =
+            reviews.length > 0
+              ? Number((reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1))
+              : null;
+          return { ...tutor, averageRating };
+        } catch {
+          return { ...tutor, averageRating: null };
+        }
+      })
+    );
 
     res.json(tutors);
   } catch (err) {
-    console.error("튜터 조회 실패:", err);
+    console.error("튜터 조회 오류:", err);
     res.json(sampleTutors);
   }
 });
 
 // ----------------------
-// 특정 튜터 조회 (상세 + 평균 평점)
+// 특정 튜터 조회
 // ----------------------
 router.get("/:id", async (req, res) => {
   const { id } = req.params;
@@ -153,7 +167,7 @@ router.post("/", async (req, res) => {
 });
 
 // ----------------------
-// 튜터 가능 시간 CRUD
+// 튜터 가능 시간 조회/수정
 // ----------------------
 router.get("/:id/availability", async (req, res) => {
   const { id } = req.params;
@@ -187,7 +201,7 @@ router.patch("/:id/availability", async (req, res) => {
 });
 
 // ----------------------
-// 예약 달력 / 시간 API (더미)
+// 예약 생성 / 더미 API
 // ----------------------
 router.get("/:id/available-dates", (req, res) => {
   res.json(["2025-08-16", "2025-08-17", "2025-08-18"]);
@@ -197,9 +211,6 @@ router.get("/:id/available-times", (req, res) => {
   res.json(["10:00", "11:00", "14:00", "16:00"]);
 });
 
-// ----------------------
-// 예약 생성
-// ----------------------
 router.post("/bookings", async (req, res) => {
   try {
     const booking = new Booking(req.body);
