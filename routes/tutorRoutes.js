@@ -12,9 +12,7 @@ const authMiddleware = require("../middleware/auth");
 // ----------------------
 // ObjectId 유효성 검사
 // ----------------------
-function isValidObjectId(id) {
-  return mongoose.Types.ObjectId.isValid(id);
-}
+const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 // ----------------------
 // Multer 설정 (비디오 업로드)
@@ -34,6 +32,7 @@ const upload = multer({ storage });
 const sampleTutors = [
   {
     _id:"66bca24e6f6e3b1f44a9a22",
+    name: "홍길동",
     email: "hong@test.com",
     experience: 10,
     bio: "10년 경력의 한국어 전문 튜터입니다.",
@@ -55,19 +54,6 @@ const sampleTutors = [
     availableTimes: [
       { day: "화요일", slots: ["13:00", "15:00"] },
       { day: "금요일", slots: ["09:00", "11:00"] },
-    ],
-  },
-  {
-    _id: "687eeafbea619374de3ce87d",
-    name: "박철수",
-    email: "park@test.com",
-    experience: 7,
-    bio: "맞춤형 한국어 수업 제공",
-    img: "https://randomuser.me/api/portraits/lego/3.jpg",
-    approved: true,
-    availableTimes: [
-      { day: "수요일", slots: ["10:00", "12:00"] },
-      { day: "목요일", slots: ["14:00", "16:00"] },
     ],
   },
 ];
@@ -102,8 +88,8 @@ router.get("/with-rating", async (req, res) => {
         const reviews = await Review.find({ tutor: tutor._id });
         const avgRating = reviews.length
           ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length
-          : null;
-        return { ...tutor, averageRating: avgRating ? Number(avgRating.toFixed(1)) : null };
+          : 0;
+        return { ...tutor, averageRating: Number(avgRating.toFixed(1)) };
       })
     );
 
@@ -119,7 +105,7 @@ router.get("/with-rating", async (req, res) => {
 // ----------------------
 router.get("/", async (req, res) => {
   try {
-    const tutors = await Tutor.find();
+    const tutors = await Tutor.find().lean();
     res.json(tutors.length > 0 ? tutors : sampleTutors);
   } catch (err) {
     console.error("튜터 목록 불러오기 실패:", err);
@@ -142,13 +128,13 @@ router.get("/:id", async (req, res) => {
     const averageRating =
       reviews.length > 0
         ? Number((reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1))
-        : null;
+        : 0;
 
     res.json({ ...tutor, averageRating });
   } catch (err) {
     console.warn("튜터 조회 실패 → 샘플 데이터 fallback");
     const sampleTutor = sampleTutors.find((t) => t._id === id);
-    if (sampleTutor) return res.json({ ...sampleTutor, averageRating: null });
+    if (sampleTutor) return res.json({ ...sampleTutor, averageRating: 0 });
     res.status(404).json({ error: "튜터를 찾을 수 없습니다." });
   }
 });

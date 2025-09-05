@@ -34,7 +34,8 @@ app.use((req, res, next) => {
  * CORS 설정
  * ====================== */
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
+  process.env.FRONTEND_URL, "http://api.koreantutoring.co.kr",
+  "http://www.koreantutoring.co.kr",
   "http://localhost:3000",
   "http://localhost:3002",
 ].filter(Boolean);
@@ -85,6 +86,7 @@ io.on("connection", (socket) => {
  * ====================== */
 const sampleTutors = [
   {
+    _id: "sample1",
     name: "장준영",
     bio: "한국어 교육 전문가입니다.",
     price: 30000,
@@ -95,6 +97,7 @@ const sampleTutors = [
     reviewCount: 10,
   },
   {
+    _id: "sample2",
     name: "장서은",
     bio: "비즈니스 한국어 전문 튜터입니다.",
     price: 35000,
@@ -105,6 +108,7 @@ const sampleTutors = [
     reviewCount: 8,
   },
   {
+    _id: "sample3",
     name: "김수영",
     bio: "회화 중심 수업을 제공합니다.",
     price: 28000,
