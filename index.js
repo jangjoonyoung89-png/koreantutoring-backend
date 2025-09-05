@@ -34,10 +34,10 @@ app.use((req, res, next) => {
  * CORS 설정
  * ====================== */
 const allowedOrigins = [
-  process.env.FRONTEND_URL, "http://api.koreantutoring.co.kr",
-  "http://www.koreantutoring.co.kr",
-  "http://localhost:3000",
-  "http://localhost:3002",
+  process.env.FRONTEND_URL, 
+  "https://www.koreantutoring.co.kr",   // ✅ 실제 프론트 도메인 (https)
+  "http://localhost:3000",              // 개발 환경
+  "http://localhost:3002",              // 개발 환경
 ].filter(Boolean);
 
 app.use(
