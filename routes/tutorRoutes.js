@@ -33,8 +33,7 @@ const upload = multer({ storage });
 // ----------------------
 const sampleTutors = [
   {
-    _id: "66bca24e6f6e3b1f44a9a111",
-    name: "홍길동",
+    _id:"66bca24e6f6e3b1f44a9a22",
     email: "hong@test.com",
     experience: 10,
     bio: "10년 경력의 한국어 전문 튜터입니다.",
@@ -46,7 +45,7 @@ const sampleTutors = [
     ],
   },
   {
-    _id: "66bca24e6f6e3b1f44a9a222",
+    _id: "687eeafbea619374de3ce87a",
     name: "김영희",
     email: "kim@test.com",
     experience: 5,
@@ -59,7 +58,7 @@ const sampleTutors = [
     ],
   },
   {
-    _id: "66bca24e6f6e3b1f44a9a333",
+    _id: "687eeafbea619374de3ce87d",
     name: "박철수",
     email: "park@test.com",
     experience: 7,

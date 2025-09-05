@@ -34,18 +34,18 @@ app.use((req, res, next) => {
  * CORS 설정
  * ====================== */
 const allowedOrigins = [
-  process.env.FRONTEND_URL || "https://koreantutoring-frontend.onrender.com",
-  "https://www.koreantutoring.co.kr",
-  "https://api.koreantutoring.co.kr",
+  process.env.FRONTEND_URL,
   "http://localhost:3000",
   "http://localhost:3002",
-];
+].filter(Boolean);
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // 서버 직접 호출 허용
-      if (!allowedOrigins.includes(origin))
-        return callback(new Error(`CORS 차단: ${origin}는 허용되지 않음`), false);
+      if (!origin) return callback(null, true);
+      if (!allowedOrigins.includes(origin)) {
+        return callback(new Error(`CORS 차단: ${origin}`), false);
+      }
       return callback(null, true);
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -81,41 +81,38 @@ io.on("connection", (socket) => {
 });
 
 /** ======================
- * 샘플 튜터 데이터 (DB 장애 시 fallback)
+ * 샘플 튜터 데이터
  * ====================== */
 const sampleTutors = [
   {
-    _id: "66bca24e6f6e3b1f44a9a111",
     name: "장준영",
-    email: "sample1@test.com",
-    experience: 4,
     bio: "한국어 교육 전문가입니다.",
-    specialty: "TOPIK 대비",
-    language: "한국어, 영어",
     price: 30000,
-    img: "https://tinyurl.com/lego1",
+    photo: "https://tinyurl.com/lego1",
+    email: "sample1@test.com",
+    approved: true,
+    averageRating: 4.5,
+    reviewCount: 10,
   },
   {
-    _id: "66bca24e6f6e3b1f44a9a222",
     name: "장서은",
-    email: "sample2@test.com",
-    experience: 5,
-    bio: "다양한 레벨의 학생들을 지도해 왔습니다.",
-    specialty: "비즈니스 한국어",
-    language: "한국어, 일본어",
+    bio: "비즈니스 한국어 전문 튜터입니다.",
     price: 35000,
-    img: "https://tinyurl.com/lego2",
+    photo: "https://tinyurl.com/lego2",
+    email: "sample2@test.com",
+    approved: true,
+    averageRating: 4.7,
+    reviewCount: 8,
   },
   {
-    _id: "66bca24e6f6e3b1f44a9a333",
     name: "김수영",
-    email: "sample3@test.com",
-    experience: 6,
-    bio: "맞춤형 수업을 제공합니다.",
-    specialty: "회화 중심",
-    language: "한국어, 중국어",
+    bio: "회화 중심 수업을 제공합니다.",
     price: 28000,
-    img: "https://tinyurl.com/lego3",
+    photo: "https://tinyurl.com/lego3",
+    email: "sample3@test.com",
+    approved: true,
+    averageRating: 4.8,
+    reviewCount: 12,
   },
 ];
 
@@ -155,12 +152,20 @@ app.use("/availability", availabilityRoutes);
 app.use("/my-bookings", studentBookingRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/admin", adminRoutes);
-app.use("/api/tutors", tutorRoutes); // ✅ DB 정상 연결 시 tutors.js 사용
 app.use("/api/materials", materialBoardRoutes);
 app.use("/tutor-verification", tutorVerificationRoutes);
 
+// tutors 라우트 → fallback 포함
+app.use("/api/tutors", async (req, res, next) => {
+  if (!dbConnected) {
+    console.log("⚠️ DB 연결 안 됨 → 샘플 튜터 반환");
+    return res.json(sampleTutors);
+  }
+  next();
+}, tutorRoutes);
+
 /** ======================
- * 예약 관련 API (테스트용)
+ * 예약 테스트용 API
  * ====================== */
 app.get("/api/tutors/:id/available-dates", (req, res) => {
   res.json(["2025-08-16", "2025-08-17", "2025-08-18"]);
@@ -182,26 +187,30 @@ app.get("/tutor-only-data", authenticateToken, authorizeRoles("tutor"), (req, re
 });
 
 /** ======================
- * 루트 라우트 (Render 확인용)
+ * 루트 라우트
  * ====================== */
 app.get("/", (req, res) => {
   res.send("✅ Backend API is running 🚀");
 });
 
 /** ======================
- * MongoDB 연결 및 서버 실행
+ * MongoDB 연결 + 샘플 데이터 자동 삽입
  * ====================== */
 let dbConnected = false;
 
 mongoose
-  .connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 5000,
-  })
-  .then(() => {
+  .connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
+  .then(async () => {
     console.log("✅ MongoDB 연결 성공");
     dbConnected = true;
+
+    // tutors 컬렉션 비어있으면 샘플 튜터 추가
+    const count = await Tutor.countDocuments();
+    if (count === 0) {
+      await Tutor.insertMany(sampleTutors);
+      console.log("✅ 샘플 튜터 데이터 추가 완료");
+    }
+
     const PORT = process.env.PORT || 8000;
     server.listen(PORT, () => console.log(`✅ 서버 실행 중: 포트 ${PORT}`));
   })
@@ -213,23 +222,6 @@ mongoose
       console.log(`⚠️ DB 연결 실패 → 샘플 데이터 모드로 포트 ${PORT} 실행`)
     );
   });
-
-/** ======================
- * DB 연결 실패 시 fallback API
- * ====================== */
-app.get("/api/tutors", async (req, res) => {
-  if (!dbConnected) {
-    console.log("⚠️ DB 연결 안 됨 → 샘플 튜터 반환");
-    return res.json(sampleTutors);
-  }
-  try {
-    const tutors = await Tutor.find();
-    res.json(tutors);
-  } catch (err) {
-    console.error("❌ 튜터 조회 실패:", err);
-    res.status(500).json({ error: "튜터 불러오기 실패" });
-  }
-});
 
 /** ======================
  * export
