@@ -34,10 +34,13 @@ app.use((req, res, next) => {
  * CORS 설정
  * ====================== */
 const allowedOrigins = [
-  process.env.FRONTEND_URL, 
-  "https://www.koreantutoring.co.kr",   // ✅ 실제 프론트 도메인 (https)
-  "http://localhost:3000",              // 개발 환경
-  "http://localhost:3002",              // 개발 환경
+  process.env.FRONTEND_URL,
+  "https://www.koreantutoring-backend.onrender.com",
+  "https://www.koreantutoring-frontend.onrender.com",
+  "https://api.koreantutoring.co.kr",
+  "https://www.koreantutoring.co.kr", // ✅ 실제 프론트 도메인 (https)
+  "http://localhost:3000", // 개발 환경
+  "http://localhost:3002", // 개발 환경
 ].filter(Boolean);
 
 app.use(
@@ -126,7 +129,7 @@ const sampleTutors = [
 const Tutor = require("./models/Tutor");
 
 /** ======================
- * 라우터 설정
+ * 라우터 불러오기
  * ====================== */
 const tutorRoutes = require("./routes/tutors");
 const bookingRoutes = require("./routes/booking");
@@ -159,14 +162,18 @@ app.use("/admin", adminRoutes);
 app.use("/api/materials", materialBoardRoutes);
 app.use("/tutor-verification", tutorVerificationRoutes);
 
-// tutors 라우트 → fallback 포함
-app.use("/api/tutors", async (req, res, next) => {
-  if (!dbConnected) {
-    console.log("⚠️ DB 연결 안 됨 → 샘플 튜터 반환");
-    return res.json(sampleTutors);
-  }
-  next();
-}, tutorRoutes);
+// tutors 라우트 → DB 연결 안 되면 샘플 데이터 반환
+app.use(
+  "/api/tutors",
+  async (req, res, next) => {
+    if (!dbConnected) {
+      console.log("⚠️ DB 연결 안 됨 → 샘플 튜터 반환");
+      return res.json(sampleTutors);
+    }
+    next();
+  },
+  tutorRoutes
+);
 
 /** ======================
  * 예약 테스트용 API
@@ -186,9 +193,14 @@ app.post("/api/bookings", (req, res) => {
 /** ======================
  * 튜터 전용 접근 예시
  * ====================== */
-app.get("/tutor-only-data", authenticateToken, authorizeRoles("tutor"), (req, res) => {
-  res.json({ message: "튜터 인증된 사용자만 접근 가능" });
-});
+app.get(
+  "/tutor-only-data",
+  authenticateToken,
+  authorizeRoles("tutor"),
+  (req, res) => {
+    res.json({ message: "튜터 인증된 사용자만 접근 가능" });
+  }
+);
 
 /** ======================
  * 루트 라우트

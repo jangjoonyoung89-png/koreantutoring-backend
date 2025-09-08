@@ -67,12 +67,13 @@ const sampleTutors = [
 router.post("/dummy", async (req, res) => {
   try {
     const count = await Tutor.countDocuments();
-    if (count > 0) return res.status(400).json({ error: "더미 데이터가 이미 존재합니다." });
+    if (count > 0)
+      return res.status(400).json({ error: "더미 데이터가 이미 존재합니다." });
 
     await Tutor.insertMany(sampleTutors);
     res.status(201).json({ message: "더미 튜터 등록 완료" });
   } catch (err) {
-    console.error(err);
+    console.error("❌ 더미 추가 실패:", err);
     res.status(500).json({ error: "더미 추가 실패" });
   }
 });
@@ -83,12 +84,16 @@ router.post("/dummy", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     let tutors = [];
+
     try {
       tutors = await Tutor.find({ approved: true }).lean();
-    } catch {
+      console.log("✅ DB에서 가져온 tutors:", tutors);
+    } catch (err) {
+      console.error("❌ DB 조회 실패:", err);
       tutors = sampleTutors;
     }
 
+    // 리뷰 평균값 추가
     tutors = await Promise.all(
       tutors.map(async (tutor) => {
         try {
@@ -96,11 +101,15 @@ router.get("/", async (req, res) => {
           const averageRating =
             reviews.length > 0
               ? Number(
-                  (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
+                  (
+                    reviews.reduce((sum, r) => sum + r.rating, 0) /
+                    reviews.length
+                  ).toFixed(1)
                 )
               : null;
           return { ...tutor, averageRating };
-        } catch {
+        } catch (err) {
+          console.error("❌ 리뷰 조회 실패:", err);
           return { ...tutor, averageRating: null };
         }
       })
@@ -108,7 +117,7 @@ router.get("/", async (req, res) => {
 
     res.json(tutors);
   } catch (err) {
-    console.error(err);
+    console.error("❌ 튜터 조회 전체 실패:", err);
     res.json(sampleTutors);
   }
 });
@@ -128,11 +137,16 @@ router.get("/:id", async (req, res) => {
     const reviews = await Review.find({ tutor: id });
     const averageRating =
       reviews.length > 0
-        ? Number((reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1))
+        ? Number(
+            (
+              reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+            ).toFixed(1)
+          )
         : null;
 
     res.json({ ...tutor, averageRating });
-  } catch {
+  } catch (err) {
+    console.error("❌ 튜터 상세 조회 실패:", err.message);
     const sampleTutor = sampleTutors.find((t) => t._id === id);
     if (sampleTutor) return res.json({ ...sampleTutor, averageRating: null });
     res.status(404).json({ error: "튜터를 찾을 수 없습니다." });
@@ -149,7 +163,8 @@ router.get("/:id/availability", async (req, res) => {
     if (isValidObjectId(id)) tutor = await Tutor.findById(id);
     if (!tutor) throw new Error("튜터 없음");
     res.json({ availableTimes: tutor.availableTimes });
-  } catch {
+  } catch (err) {
+    console.error("❌ 튜터 가능 시간 조회 실패:", err.message);
     const sampleTutor = sampleTutors.find((t) => t._id === id);
     if (sampleTutor) return res.json({ availableTimes: sampleTutor.availableTimes });
     res.status(500).json({ error: "서버 오류" });
@@ -163,11 +178,15 @@ router.patch("/:id/availability", async (req, res) => {
   const { id } = req.params;
   const { availableTimes } = req.body;
   try {
-    const updated = await Tutor.findByIdAndUpdate(id, { availableTimes }, { new: true });
+    const updated = await Tutor.findByIdAndUpdate(
+      id,
+      { availableTimes },
+      { new: true }
+    );
     if (!updated) throw new Error("튜터 없음");
     res.json({ message: "가능 시간 업데이트 성공", tutor: updated });
   } catch (err) {
-    console.error(err);
+    console.error("❌ 가능 시간 업데이트 실패:", err);
     res.status(500).json({ error: "서버 오류" });
   }
 });
@@ -181,7 +200,7 @@ router.post("/bookings", async (req, res) => {
     await booking.save();
     res.json({ message: "예약 완료", booking });
   } catch (err) {
-    console.error(err);
+    console.error("❌ 예약 실패:", err);
     res.status(500).json({ error: "예약 실패" });
   }
 });
@@ -191,7 +210,8 @@ router.post("/bookings", async (req, res) => {
 // ----------------------
 router.post("/:id/upload-video", upload.single("video"), async (req, res) => {
   const { id } = req.params;
-  if (!req.file) return res.status(400).json({ error: "파일이 업로드되지 않았습니다." });
+  if (!req.file)
+    return res.status(400).json({ error: "파일이 업로드되지 않았습니다." });
 
   try {
     const tutor = await Tutor.findById(id);
@@ -201,7 +221,7 @@ router.post("/:id/upload-video", upload.single("video"), async (req, res) => {
     await tutor.save();
     res.json({ success: true, sampleVideoUrl: tutor.sampleVideoUrl });
   } catch (err) {
-    console.error(err);
+    console.error("❌ 동영상 업로드 실패:", err);
     res.status(500).json({ error: "서버 오류" });
   }
 });
