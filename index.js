@@ -38,9 +38,9 @@ const allowedOrigins = [
   "https://www.koreantutoring-backend.onrender.com",
   "https://www.koreantutoring-frontend.onrender.com",
   "https://api.koreantutoring.co.kr",
-  "https://www.koreantutoring.co.kr", // ✅ 실제 프론트 도메인 (https)
-  "http://localhost:3000", // 개발 환경
-  "http://localhost:3002", // 개발 환경
+  "https://www.koreantutoring.co.kr",
+  "http://localhost:3000",
+  "http://localhost:3002",
 ].filter(Boolean);
 
 app.use(
@@ -71,6 +71,7 @@ app.use("/videos", express.static(path.join(__dirname, "uploads/videos")));
 const io = new Server(server, {
   cors: { origin: allowedOrigins, methods: ["GET", "POST"], credentials: true },
 });
+
 io.on("connection", (socket) => {
   console.log("✅ 사용자 연결됨:", socket.id);
   socket.on("join-room", ({ roomId, userId }) => {
@@ -127,6 +128,14 @@ const sampleTutors = [
  * 모델 불러오기
  * ====================== */
 const Tutor = require("./models/Tutor");
+const Review = require("./models/Review");
+const Booking = require("./models/Booking");
+const Material = require("./models/Material");
+
+/** ======================
+ * 미들웨어 불러오기
+ * ====================== */
+const { authenticateToken, authorizeRoles } = require("./middleware/auth");
 
 /** ======================
  * 라우터 불러오기
@@ -144,7 +153,6 @@ const statsRoutes = require("./routes/stats");
 const adminRoutes = require("./routes/admin");
 const materialBoardRoutes = require("./routes/materialBoard");
 const tutorVerificationRoutes = require("./routes/tutorVerification");
-const { authenticateToken, authorizeRoles } = require("./middleware/auth");
 
 /** ======================
  * API 라우팅
@@ -163,6 +171,7 @@ app.use("/api/materials", materialBoardRoutes);
 app.use("/tutor-verification", tutorVerificationRoutes);
 
 // tutors 라우트 → DB 연결 안 되면 샘플 데이터 반환
+let dbConnected = false;
 app.use(
   "/api/tutors",
   async (req, res, next) => {
@@ -193,14 +202,9 @@ app.post("/api/bookings", (req, res) => {
 /** ======================
  * 튜터 전용 접근 예시
  * ====================== */
-app.get(
-  "/tutor-only-data",
-  authenticateToken,
-  authorizeRoles("tutor"),
-  (req, res) => {
-    res.json({ message: "튜터 인증된 사용자만 접근 가능" });
-  }
-);
+app.get("/tutor-only-data", authenticateToken, authorizeRoles("tutor"), (req, res) => {
+  res.json({ message: "튜터 인증된 사용자만 접근 가능" });
+});
 
 /** ======================
  * 루트 라우트
@@ -212,15 +216,12 @@ app.get("/", (req, res) => {
 /** ======================
  * MongoDB 연결 + 샘플 데이터 자동 삽입
  * ====================== */
-let dbConnected = false;
-
 mongoose
   .connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
   .then(async () => {
     console.log("✅ MongoDB 연결 성공");
     dbConnected = true;
 
-    // tutors 컬렉션 비어있으면 샘플 튜터 추가
     const count = await Tutor.countDocuments();
     if (count === 0) {
       await Tutor.insertMany(sampleTutors);

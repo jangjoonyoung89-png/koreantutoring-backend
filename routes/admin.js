@@ -22,13 +22,24 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // ======================
+// 관리자 로그인 (샘플용)
+// ======================
+router.post("/login", (req, res) => {
+  const { username, password } = req.body;
+  if (username === "admin" && password === "1234") {
+    return res.json({ success: true, token: "admin-token" });
+  }
+  return res.status(401).json({ success: false, message: "Invalid credentials" });
+});
+
+// ======================
 // 관리자 전용 권한 체크
 // ======================
 router.use(authenticateToken);
 router.use(authorizeRoles("admin"));
 
 // ======================
-// 1. 승인 대기 튜터 목록 조회
+// 승인 대기 튜터 목록 조회
 // ======================
 router.get("/tutors/pending", async (req, res) => {
   try {
@@ -41,7 +52,7 @@ router.get("/tutors/pending", async (req, res) => {
 });
 
 // ======================
-// 2. 튜터 승인/거절
+// 튜터 승인/거절
 // ======================
 router.patch("/tutors/:id/approve", async (req, res) => {
   try {
@@ -51,7 +62,6 @@ router.patch("/tutors/:id/approve", async (req, res) => {
       { new: true }
     );
     if (!tutor) return res.status(404).json({ message: "튜터를 찾을 수 없습니다." });
-
     res.json({ message: "튜터 승인 완료", tutor });
   } catch (error) {
     console.error("튜터 승인 실패:", error);
@@ -67,7 +77,6 @@ router.patch("/tutors/:id/reject", async (req, res) => {
       { new: true }
     );
     if (!tutor) return res.status(404).json({ message: "튜터를 찾을 수 없습니다." });
-
     res.json({ message: "튜터 거절 완료", tutor });
   } catch (error) {
     console.error("튜터 거절 실패:", error);
@@ -76,7 +85,7 @@ router.patch("/tutors/:id/reject", async (req, res) => {
 });
 
 // ======================
-// 3. 리뷰 관리
+// 리뷰 관리
 // ======================
 router.get("/reviews", async (req, res) => {
   try {
@@ -103,7 +112,7 @@ router.delete("/reviews/:id", async (req, res) => {
 });
 
 // ======================
-// 4. 자료 업로드 관리
+// 자료 업로드 관리
 // ======================
 router.post("/materials", upload.single("file"), async (req, res) => {
   const { title, description } = req.body;
@@ -146,7 +155,7 @@ router.delete("/materials/:id", async (req, res) => {
 });
 
 // ======================
-// 5. 통계 API
+// 통계 API
 // ======================
 router.get("/stats", async (req, res) => {
   try {
