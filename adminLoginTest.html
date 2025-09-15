@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>관리자 로그인 테스트</title>
+</head>
+<body>
+  <h2>관리자 로그인 테스트</h2>
+
+  <input id="email" type="text" value="admin@example.com" placeholder="Email"><br><br>
+  <input id="password" type="password" value="admin123" placeholder="Password"><br><br>
+  <button onclick="login()">로그인</button>
+
+  <p id="result"></p>
+
+  <script>
+    function login() {
+      fetch('http://localhost:3000/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: document.getElementById('email').value,
+          password: document.getElementById('password').value
+        })
+      })
+      .then(res => res.text())
+      .then(text => document.getElementById('result').innerText = text)
+      .catch(err => document.getElementById('result').innerText = '오류: ' + err);
+    }
+  </script>
+</body>
+</html>
