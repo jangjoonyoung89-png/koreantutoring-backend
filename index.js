@@ -7,6 +7,7 @@ const { Server } = require("socket.io");
 const morgan = require("morgan");
 const path = require("path");
 const i18n = require("i18n");
+const fs = require("fs");
 
 const app = express();
 const server = http.createServer(app);
@@ -62,11 +63,19 @@ app.use(
  * ====================== */
 app.use(express.json());
 app.use(morgan("dev"));
+
+// 정적 파일 제공
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/videos", express.static(path.join(__dirname, "uploads/videos")));
 
+// ===========================
+// 업로드 폴더 자동 생성
+// ===========================
+const uploadDir = "uploads/videos";
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
 /** ======================
- * Socket.io 설정
+ * Socket.io 설정 (실시간 수업)
  * ====================== */
 const io = new Server(server, {
   cors: { origin: allowedOrigins, methods: ["GET", "POST"], credentials: true },
@@ -74,10 +83,17 @@ const io = new Server(server, {
 
 io.on("connection", (socket) => {
   console.log("✅ 사용자 연결됨:", socket.id);
+
   socket.on("join-room", ({ roomId, userId }) => {
     socket.join(roomId);
     console.log(`📺 유저 ${userId}가 룸 ${roomId} 입장`);
     socket.to(roomId).emit("user-connected", userId);
+
+    // WebRTC 시그널 전달
+    socket.on("signal", (data) => {
+      socket.to(roomId).emit("signal", { userId, signal: data });
+    });
+
     socket.on("disconnect", () => {
       console.log(`❌ 유저 ${userId} 연결 종료`);
       socket.to(roomId).emit("user-disconnected", userId);
@@ -99,6 +115,7 @@ const sampleTutors = [
     approved: true,
     averageRating: 4.5,
     reviewCount: 10,
+    sampleVideos: [],
   },
   {
     _id: "sample2",
@@ -110,6 +127,7 @@ const sampleTutors = [
     approved: true,
     averageRating: 4.7,
     reviewCount: 8,
+    sampleVideos: [],
   },
   {
     _id: "sample3",
@@ -121,6 +139,7 @@ const sampleTutors = [
     approved: true,
     averageRating: 4.8,
     reviewCount: 12,
+    sampleVideos: [],
   },
 ];
 
@@ -153,6 +172,7 @@ const statsRoutes = require("./routes/stats");
 const adminRoutes = require("./routes/admin");
 const materialBoardRoutes = require("./routes/materialBoard");
 const tutorVerificationRoutes = require("./routes/tutorVerification");
+const videosRoutes = require("./routes/videos"); // 샘플 영상 + 업로드
 
 /** ======================
  * API 라우팅
@@ -169,6 +189,7 @@ app.use("/api/stats", statsRoutes);
 app.use("/admin", adminRoutes);
 app.use("/api/materials", materialBoardRoutes);
 app.use("/tutor-verification", tutorVerificationRoutes);
+app.use("/api/videos", videosRoutes);
 
 // tutors 라우트 → DB 연결 안 되면 샘플 데이터 반환
 let dbConnected = false;

@@ -43,7 +43,4 @@ const tutorSchema = new mongoose.Schema(
   }
 );
 
-// ------------------------
-// 모델 내보내기
-// ------------------------
 module.exports = mongoose.model("Tutor", tutorSchema);
