@@ -190,6 +190,7 @@ app.use("/admin", adminRoutes);
 app.use("/api/materials", materialBoardRoutes);
 app.use("/tutor-verification", tutorVerificationRoutes);
 app.use("/api/videos", videosRoutes);
+app.use("/api/admin/qa", require("./routes/adminQA"));
 
 // tutors 라우트 → DB 연결 안 되면 샘플 데이터 반환
 let dbConnected = false;
