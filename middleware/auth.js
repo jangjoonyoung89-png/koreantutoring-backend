@@ -1,10 +1,12 @@
 const jwt = require("jsonwebtoken");
 
+// ----------------------
 // JWT 토큰 검증 미들웨어
+// ----------------------
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
-  // Authorization 헤더가 없거나 'Bearer '로 시작하지 않는 경우 401 반환
+  // Authorization 헤더가 없거나 'Bearer '로 시작하지 않으면 401 반환
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ detail: "인증 정보가 없습니다." });
   }
@@ -25,8 +27,10 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
+// ----------------------
 // 역할(권한) 체크 미들웨어
-// roles는 허용할 역할 배열 예: ["admin", "tutor"]
+// roles: 허용할 역할 배열 예: ["admin", "tutor"]
+// ----------------------
 const authorizeRoles = (...roles) => {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
@@ -36,7 +40,9 @@ const authorizeRoles = (...roles) => {
   };
 };
 
-// 관리자 권한 체크 미들웨어
+// ----------------------
+// 관리자 전용 권한 체크 미들웨어
+// ----------------------
 const requireAdmin = (req, res, next) => {
   if (!req.user || req.user.role !== "admin") {
     return res.status(403).json({ detail: "권한이 없습니다." });
@@ -44,8 +50,15 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
+// ----------------------
+// requireRole 함수 alias
+// 기존 코드에서 사용하던 requireRole("admin") 같은 형태 지원
+// ----------------------
+const requireRole = (role) => authorizeRoles(role);
+
 module.exports = {
   authenticateToken,
   authorizeRoles,
   requireAdmin,
+  requireRole,
 };
