@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
+const jwt = require("jsonwebtoken");
 
 const Tutor = require("../models/Tutor");
 const Review = require("../models/Review");
@@ -10,10 +12,18 @@ const Material = require("../models/Material");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
 // ======================
-// Multer 설정 (자료 업로드)
+// 🔧 업로드 폴더 자동 생성
+// ======================
+const uploadDir = "uploads/materials";
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// ======================
+// 📁 Multer 설정 (자료 업로드)
 // ======================
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/materials"),
+  destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
     cb(null, `material_${Date.now()}${ext}`);
@@ -22,24 +32,32 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // ======================
-// 관리자 로그인 (샘플용)
+// 🧾 관리자 로그인 (JWT 발급)
 // ======================
 router.post("/login", (req, res) => {
   const { username, password } = req.body;
+
+  // 샘플 관리자 계정
   if (username === "admin" && password === "1234") {
-    return res.json({ success: true, token: "admin-token" });
+    const token = jwt.sign(
+      { id: "admin-id", role: "admin", username },
+      process.env.JWT_SECRET || "secret_key",
+      { expiresIn: "2h" }
+    );
+    return res.json({ success: true, token });
   }
-  return res.status(401).json({ success: false, message: "Invalid credentials" });
+
+  return res.status(401).json({ success: false, message: "잘못된 관리자 정보입니다." });
 });
 
 // ======================
-// 관리자 전용 권한 체크
+// 🔐 관리자 인증 미들웨어
 // ======================
 router.use(authenticateToken);
 router.use(authorizeRoles("admin"));
 
 // ======================
-// 승인 대기 튜터 목록 조회
+// 👩‍🏫 승인 대기 튜터 목록 조회
 // ======================
 router.get("/tutors/pending", async (req, res) => {
   try {
@@ -52,7 +70,7 @@ router.get("/tutors/pending", async (req, res) => {
 });
 
 // ======================
-// 튜터 승인/거절
+// ✅ 튜터 승인
 // ======================
 router.patch("/tutors/:id/approve", async (req, res) => {
   try {
@@ -69,6 +87,9 @@ router.patch("/tutors/:id/approve", async (req, res) => {
   }
 });
 
+// ======================
+// ❌ 튜터 거절
+// ======================
 router.patch("/tutors/:id/reject", async (req, res) => {
   try {
     const tutor = await Tutor.findByIdAndUpdate(
@@ -85,7 +106,7 @@ router.patch("/tutors/:id/reject", async (req, res) => {
 });
 
 // ======================
-// 리뷰 관리
+// 💬 리뷰 관리
 // ======================
 router.get("/reviews", async (req, res) => {
   try {
@@ -95,7 +116,7 @@ router.get("/reviews", async (req, res) => {
     res.json(reviews);
   } catch (err) {
     console.error("리뷰 조회 오류:", err);
-    res.status(500).json({ detail: "서버 오류" });
+    res.status(500).json({ detail: "리뷰 조회 중 서버 오류" });
   }
 });
 
@@ -107,16 +128,16 @@ router.delete("/reviews/:id", async (req, res) => {
     res.json({ message: "리뷰 삭제 완료" });
   } catch (err) {
     console.error("리뷰 삭제 오류:", err);
-    res.status(500).json({ detail: "서버 오류" });
+    res.status(500).json({ detail: "리뷰 삭제 중 서버 오류" });
   }
 });
 
 // ======================
-// 자료 업로드 관리
+// 📚 자료 업로드 관리
 // ======================
 router.post("/materials", upload.single("file"), async (req, res) => {
   const { title, description } = req.body;
-  if (!req.file || !title) return res.status(400).json({ detail: "제목과 파일 필요" });
+  if (!req.file || !title) return res.status(400).json({ detail: "제목과 파일이 필요합니다." });
 
   try {
     const material = new Material({
@@ -128,7 +149,7 @@ router.post("/materials", upload.single("file"), async (req, res) => {
     res.status(201).json({ message: "자료 업로드 완료", material });
   } catch (err) {
     console.error("자료 업로드 오류:", err);
-    res.status(500).json({ detail: "서버 오류" });
+    res.status(500).json({ detail: "자료 업로드 중 서버 오류" });
   }
 });
 
@@ -138,7 +159,7 @@ router.get("/materials", async (req, res) => {
     res.json(materials);
   } catch (err) {
     console.error("자료 조회 오류:", err);
-    res.status(500).json({ detail: "서버 오류" });
+    res.status(500).json({ detail: "자료 조회 중 서버 오류" });
   }
 });
 
@@ -150,12 +171,12 @@ router.delete("/materials/:id", async (req, res) => {
     res.json({ message: "자료 삭제 완료" });
   } catch (err) {
     console.error("자료 삭제 오류:", err);
-    res.status(500).json({ detail: "서버 오류" });
+    res.status(500).json({ detail: "자료 삭제 중 서버 오류" });
   }
 });
 
 // ======================
-// 통계 API
+// 📊 통계 API
 // ======================
 router.get("/stats", async (req, res) => {
   try {
@@ -177,7 +198,7 @@ router.get("/stats", async (req, res) => {
     });
   } catch (err) {
     console.error("통계 조회 오류:", err);
-    res.status(500).json({ detail: "서버 오류" });
+    res.status(500).json({ detail: "통계 조회 중 서버 오류" });
   }
 });
 
