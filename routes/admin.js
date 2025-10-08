@@ -32,22 +32,33 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // ======================
-// 🧾 관리자 로그인 (JWT 발급)
+// 🧾 관리자 로그인 (JWT 발급 + user 객체 추가)
 // ======================
 router.post("/login", (req, res) => {
   const { username, password } = req.body;
 
   // 샘플 관리자 계정
   if (username === "admin" && password === "1234") {
-    const token = jwt.sign(
-      { id: "admin-id", role: "admin", username },
-      process.env.JWT_SECRET || "secret_key",
-      { expiresIn: "2h" }
-    );
-    return res.json({ success: true, token });
+    const user = {
+      id: "admin-id",
+      username: "admin",
+      role: "admin",
+    };
+
+    const token = jwt.sign(user, process.env.JWT_SECRET || "secret_key", {
+      expiresIn: "2h",
+    });
+
+    return res.json({
+      success: true,
+      token,
+      user, // ✅ 프론트에서 user.role 확인 가능
+    });
   }
 
-  return res.status(401).json({ success: false, message: "잘못된 관리자 정보입니다." });
+  return res
+    .status(401)
+    .json({ success: false, message: "잘못된 관리자 정보입니다." });
 });
 
 // ======================
