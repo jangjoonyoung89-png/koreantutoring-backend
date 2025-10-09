@@ -7,6 +7,7 @@ const path = require("path");
 const Tutor = require("../models/Tutor");
 const Review = require("../models/Review");
 const Booking = require("../models/Booking");
+const { authenticateToken } = require("../middleware/auth"); // 인증 미들웨어
 
 // ----------------------
 // ObjectId 유효성 검사
@@ -28,7 +29,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // ----------------------
-// 샘플 튜터 데이터
+// 샘플 데이터
 // ----------------------
 const sampleTutors = [
   {
@@ -83,41 +84,27 @@ router.post("/dummy", async (req, res) => {
 // ----------------------
 router.get("/", async (req, res) => {
   try {
-    let tutors = [];
-
-    try {
-      tutors = await Tutor.find({ approved: true }).lean();
-      console.log("✅ DB에서 가져온 tutors:", tutors);
-    } catch (err) {
-      console.error("❌ DB 조회 실패:", err);
-      tutors = sampleTutors;
-    }
+    let tutors = await Tutor.find({ approved: true }).lean();
 
     // 리뷰 평균값 추가
     tutors = await Promise.all(
       tutors.map(async (tutor) => {
-        try {
-          const reviews = await Review.find({ tutor: tutor._id });
-          const averageRating =
-            reviews.length > 0
-              ? Number(
-                  (
-                    reviews.reduce((sum, r) => sum + r.rating, 0) /
-                    reviews.length
-                  ).toFixed(1)
-                )
-              : null;
-          return { ...tutor, averageRating };
-        } catch (err) {
-          console.error("❌ 리뷰 조회 실패:", err);
-          return { ...tutor, averageRating: null };
-        }
+        const reviews = await Review.find({ tutor: tutor._id });
+        const averageRating =
+          reviews.length > 0
+            ? Number(
+                (
+                  reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+                ).toFixed(1)
+              )
+            : null;
+        return { ...tutor, averageRating };
       })
     );
 
     res.json(tutors);
   } catch (err) {
-    console.error("❌ 튜터 조회 전체 실패:", err);
+    console.error("❌ 튜터 조회 실패:", err);
     res.json(sampleTutors);
   }
 });
@@ -131,7 +118,6 @@ router.get("/:id", async (req, res) => {
   try {
     let tutor = null;
     if (isValidObjectId(id)) tutor = await Tutor.findById(id).lean();
-
     if (!tutor) throw new Error("튜터 없음");
 
     const reviews = await Review.find({ tutor: id });
@@ -192,16 +178,43 @@ router.patch("/:id/availability", async (req, res) => {
 });
 
 // ----------------------
-// 예약 생성
+// 예약 생성 (studentId 자동 설정)
 // ----------------------
-router.post("/bookings", async (req, res) => {
+router.post("/bookings", authenticateToken, async (req, res) => {
   try {
-    const booking = new Booking(req.body);
+    const { tutorId, date, time } = req.body;
+
+    // 중복 예약 체크
+    const exist = await Booking.findOne({ tutorId, date, time });
+    if (exist) return res.status(400).json({ message: "이미 예약된 시간입니다." });
+
+    const booking = new Booking({
+      tutorId,
+      studentId: req.user.id, // 인증된 학생 ID
+      date,
+      time,
+      status: "pending",
+    });
+
     await booking.save();
     res.json({ message: "예약 완료", booking });
   } catch (err) {
     console.error("❌ 예약 실패:", err);
     res.status(500).json({ error: "예약 실패" });
+  }
+});
+
+// ----------------------
+// 튜터 대시보드 조회 (예약 + 리뷰)
+// ----------------------
+router.get("/dashboard", authenticateToken, async (req, res) => {
+  try {
+    const bookings = await Booking.find({ tutorId: req.user.id });
+    const reviews = await Review.find({ tutorId: req.user.id });
+    res.json({ bookings, reviews });
+  } catch (err) {
+    console.error("❌ 대시보드 조회 실패:", err);
+    res.status(500).json({ message: "대시보드 정보 불러오기 실패" });
   }
 });
 
