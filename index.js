@@ -24,6 +24,7 @@ i18n.configure({
   syncFiles: true,
   objectNotation: true,
 });
+
 app.use(i18n.init);
 app.use((req, res, next) => {
   const lang = req.query.lang;
@@ -79,7 +80,11 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
  * Socket.io 설정 (실시간 수업)
  * ====================== */
 const io = new Server(server, {
-  cors: { origin: allowedOrigins, methods: ["GET", "POST"], credentials: true },
+  cors: {
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
 });
 
 io.on("connection", (socket) => {
@@ -88,6 +93,7 @@ io.on("connection", (socket) => {
   socket.on("join-room", ({ roomId, userId }) => {
     socket.join(roomId);
     console.log(`📺 유저 ${userId}가 룸 ${roomId} 입장`);
+
     socket.to(roomId).emit("user-connected", userId);
 
     // WebRTC 시그널 전달
@@ -173,7 +179,9 @@ const statsRoutes = require("./routes/stats");
 const adminRoutes = require("./routes/admin");
 const materialBoardRoutes = require("./routes/materialBoard");
 const tutorVerificationRoutes = require("./routes/tutorVerification");
-const videosRoutes = require("./routes/videos"); // 샘플 영상 + 업로드
+const videosRoutes = require("./routes/videos");
+
+// 샘플 영상 + 업로드
 
 /** ======================
  * API 라우팅
@@ -213,9 +221,11 @@ app.use(
 app.get("/api/tutors/:id/available-dates", (req, res) => {
   res.json(["2025-08-16", "2025-08-17", "2025-08-18"]);
 });
+
 app.get("/api/tutors/:id/available-times", (req, res) => {
   res.json(["10:00", "11:00", "14:00", "16:00"]);
 });
+
 app.post("/api/bookings", (req, res) => {
   const { tutorId, date, time, studentName } = req.body;
   console.log("📅 예약 요청:", { tutorId, date, time, studentName });

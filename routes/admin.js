@@ -4,24 +4,24 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 
 const Tutor = require("../models/Tutor");
 const Review = require("../models/Review");
 const Booking = require("../models/Booking");
 const Material = require("../models/Material");
+const User = require("../models/User");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
-// ======================
-// 🔧 업로드 폴더 자동 생성
-// ======================
-const uploadDir = "uploads/materials";
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// ===================================================
+// 📂 업로드 폴더 자동 생성
+// ===================================================
+const uploadDir = path.join(__dirname, "../uploads/materials");
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-// ======================
+// ===================================================
 // 📁 Multer 설정 (자료 업로드)
-// ======================
+// ===================================================
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
@@ -31,58 +31,83 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// ======================
-// 🧾 관리자 로그인 (JWT 발급 + user 객체 추가)
-// ======================
-router.post("/login", (req, res) => {
-  const { username, password } = req.body;
+// ===================================================
+// 🧾 관리자 로그인 (DB 조회 + JWT 발급)
+// ===================================================
+router.post("/login", async (req, res) => {
+  const { email, password } = req.body;
 
-  // 샘플 관리자 계정
-  if (username === "admin" && password === "1234") {
-    const user = {
-      id: "admin-id",
-      username: "admin",
-      role: "admin",
-    };
+  try {
+    // ✅ 1. 필수값 확인
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ success: false, message: "이메일과 비밀번호를 모두 입력하세요." });
+    }
 
-    const token = jwt.sign(user, process.env.JWT_SECRET || "secret_key", {
-      expiresIn: "2h",
-    });
+    // ✅ 2. 관리자 계정 확인
+    const admin = await User.findOne({ email, role: "admin" });
+    if (!admin) {
+      return res
+        .status(401)
+        .json({ success: false, message: "관리자 계정을 찾을 수 없습니다." });
+    }
 
-    return res.json({
+    // ✅ 3. 비밀번호 일치 여부 확인
+    const isMatch = await bcrypt.compare(password, admin.password);
+    if (!isMatch) {
+      return res
+        .status(401)
+        .json({ success: false, message: "비밀번호가 일치하지 않습니다." });
+    }
+
+    // ✅ 4. JWT 토큰 발급
+    const token = jwt.sign(
+      { id: admin._id, email: admin.email, role: admin.role },
+      process.env.JWT_SECRET || "default_secret_key",
+      { expiresIn: "2h" }
+    );
+
+    // ✅ 5. 응답 전송
+    res.json({
       success: true,
+      message: "관리자 로그인 성공",
       token,
-      user, // ✅ 프론트에서 user.role 확인 가능
+      user: {
+        id: admin._id,
+        email: admin.email,
+        role: admin.role,
+        full_name: admin.full_name,
+      },
     });
+  } catch (err) {
+    console.error("❌ 관리자 로그인 오류:", err);
+    res.status(500).json({ success: false, message: "서버 오류가 발생했습니다." });
   }
-
-  return res
-    .status(401)
-    .json({ success: false, message: "잘못된 관리자 정보입니다." });
 });
 
-// ======================
-// 🔐 관리자 인증 미들웨어
-// ======================
+// ===================================================
+// 🔐 관리자 인증 미들웨어 (이후 모든 API 보호)
+// ===================================================
 router.use(authenticateToken);
 router.use(authorizeRoles("admin"));
 
-// ======================
+// ===================================================
 // 👩‍🏫 승인 대기 튜터 목록 조회
-// ======================
+// ===================================================
 router.get("/tutors/pending", async (req, res) => {
   try {
     const tutors = await Tutor.find({ approved: false, rejected: { $ne: true } });
-    res.json(tutors);
+    res.json({ success: true, tutors });
   } catch (error) {
     console.error("튜터 목록 조회 실패:", error);
-    res.status(500).json({ message: "튜터 목록 조회 실패" });
+    res.status(500).json({ success: false, message: "튜터 목록 조회 실패" });
   }
 });
 
-// ======================
+// ===================================================
 // ✅ 튜터 승인
-// ======================
+// ===================================================
 router.patch("/tutors/:id/approve", async (req, res) => {
   try {
     const tutor = await Tutor.findByIdAndUpdate(
@@ -90,17 +115,19 @@ router.patch("/tutors/:id/approve", async (req, res) => {
       { approved: true, rejected: false },
       { new: true }
     );
-    if (!tutor) return res.status(404).json({ message: "튜터를 찾을 수 없습니다." });
-    res.json({ message: "튜터 승인 완료", tutor });
+    if (!tutor)
+      return res.status(404).json({ success: false, message: "튜터를 찾을 수 없습니다." });
+
+    res.json({ success: true, message: "튜터 승인 완료", tutor });
   } catch (error) {
     console.error("튜터 승인 실패:", error);
-    res.status(500).json({ message: "튜터 승인 실패" });
+    res.status(500).json({ success: false, message: "튜터 승인 실패" });
   }
 });
 
-// ======================
+// ===================================================
 // ❌ 튜터 거절
-// ======================
+// ===================================================
 router.patch("/tutors/:id/reject", async (req, res) => {
   try {
     const tutor = await Tutor.findByIdAndUpdate(
@@ -108,47 +135,56 @@ router.patch("/tutors/:id/reject", async (req, res) => {
       { approved: false, rejected: true },
       { new: true }
     );
-    if (!tutor) return res.status(404).json({ message: "튜터를 찾을 수 없습니다." });
-    res.json({ message: "튜터 거절 완료", tutor });
+    if (!tutor)
+      return res.status(404).json({ success: false, message: "튜터를 찾을 수 없습니다." });
+
+    res.json({ success: true, message: "튜터 거절 완료", tutor });
   } catch (error) {
     console.error("튜터 거절 실패:", error);
-    res.status(500).json({ message: "튜터 거절 실패" });
+    res.status(500).json({ success: false, message: "튜터 거절 실패" });
   }
 });
 
-// ======================
+// ===================================================
 // 💬 리뷰 관리
-// ======================
+// ===================================================
 router.get("/reviews", async (req, res) => {
   try {
     const reviews = await Review.find()
       .populate("student", "full_name email")
       .populate("tutor", "name email");
-    res.json(reviews);
+    res.json({ success: true, reviews });
   } catch (err) {
     console.error("리뷰 조회 오류:", err);
-    res.status(500).json({ detail: "리뷰 조회 중 서버 오류" });
+    res.status(500).json({ success: false, message: "리뷰 조회 중 서버 오류" });
   }
 });
 
 router.delete("/reviews/:id", async (req, res) => {
   try {
     const review = await Review.findById(req.params.id);
-    if (!review) return res.status(404).json({ detail: "리뷰 없음" });
+    if (!review)
+      return res.status(404).json({ success: false, message: "리뷰를 찾을 수 없습니다." });
+
     await review.deleteOne();
-    res.json({ message: "리뷰 삭제 완료" });
+    res.json({ success: true, message: "리뷰 삭제 완료" });
   } catch (err) {
     console.error("리뷰 삭제 오류:", err);
-    res.status(500).json({ detail: "리뷰 삭제 중 서버 오류" });
+    res.status(500).json({ success: false, message: "리뷰 삭제 중 서버 오류" });
   }
 });
 
-// ======================
-// 📚 자료 업로드 관리
-// ======================
+// ===================================================
+// 📚 자료 업로드 및 관리
+// ===================================================
 router.post("/materials", upload.single("file"), async (req, res) => {
   const { title, description } = req.body;
-  if (!req.file || !title) return res.status(400).json({ detail: "제목과 파일이 필요합니다." });
+
+  if (!req.file || !title) {
+    return res
+      .status(400)
+      .json({ success: false, message: "제목과 파일이 필요합니다." });
+  }
 
   try {
     const material = new Material({
@@ -157,60 +193,80 @@ router.post("/materials", upload.single("file"), async (req, res) => {
       fileUrl: `/uploads/materials/${req.file.filename}`,
     });
     await material.save();
-    res.status(201).json({ message: "자료 업로드 완료", material });
+
+    res.status(201).json({ success: true, message: "자료 업로드 완료", material });
   } catch (err) {
     console.error("자료 업로드 오류:", err);
-    res.status(500).json({ detail: "자료 업로드 중 서버 오류" });
+    res.status(500).json({ success: false, message: "자료 업로드 중 서버 오류" });
   }
 });
 
+// 자료 전체 조회
 router.get("/materials", async (req, res) => {
   try {
-    const materials = await Material.find();
-    res.json(materials);
+    const materials = await Material.find().sort({ createdAt: -1 });
+    res.json({ success: true, materials });
   } catch (err) {
     console.error("자료 조회 오류:", err);
-    res.status(500).json({ detail: "자료 조회 중 서버 오류" });
+    res.status(500).json({ success: false, message: "자료 조회 중 서버 오류" });
   }
 });
 
+// 자료 삭제
 router.delete("/materials/:id", async (req, res) => {
   try {
     const material = await Material.findById(req.params.id);
-    if (!material) return res.status(404).json({ detail: "자료 없음" });
+    if (!material)
+      return res.status(404).json({ success: false, message: "자료를 찾을 수 없습니다." });
+
+    // 파일도 삭제
+    const filePath = path.join(__dirname, "..", material.fileUrl);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
     await material.deleteOne();
-    res.json({ message: "자료 삭제 완료" });
+    res.json({ success: true, message: "자료 삭제 완료" });
   } catch (err) {
     console.error("자료 삭제 오류:", err);
-    res.status(500).json({ detail: "자료 삭제 중 서버 오류" });
+    res.status(500).json({ success: false, message: "자료 삭제 중 서버 오류" });
   }
 });
 
-// ======================
-// 📊 통계 API
-// ======================
+// ===================================================
+// 📊 관리자 통계 API
+// ===================================================
 router.get("/stats", async (req, res) => {
   try {
     const totalTutors = await Tutor.countDocuments();
     const totalApprovedTutors = await Tutor.countDocuments({ approved: true });
     const totalBookings = await Booking.countDocuments();
     const totalReviews = await Review.countDocuments();
+
     const avgRatingData = await Review.aggregate([
       { $group: { _id: null, avgRating: { $avg: "$rating" } } },
     ]);
     const averageRating = avgRatingData[0]?.avgRating || 0;
 
     res.json({
-      totalTutors,
-      totalApprovedTutors,
-      totalBookings,
-      totalReviews,
-      averageRating: Number(averageRating.toFixed(1)),
+      success: true,
+      stats: {
+        totalTutors,
+        totalApprovedTutors,
+        totalBookings,
+        totalReviews,
+        averageRating: Number(averageRating.toFixed(1)),
+      },
     });
   } catch (err) {
     console.error("통계 조회 오류:", err);
-    res.status(500).json({ detail: "통계 조회 중 서버 오류" });
+    res.status(500).json({ success: false, message: "통계 조회 중 서버 오류" });
   }
+});
+
+// ===================================================
+// 🧩 토큰 검증 (자동 로그인용)
+// ===================================================
+router.get("/verify-token", authenticateToken, authorizeRoles("admin"), (req, res) => {
+  res.json({ success: true, message: "유효한 관리자 토큰입니다." });
 });
 
 module.exports = router;
