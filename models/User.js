@@ -9,31 +9,32 @@ const userSchema = new mongoose.Schema(
     // 사용자 이름
     full_name: {
       type: String,
-      required: true,
+      required: [true, "이름은 필수 항목입니다."],
       trim: true,
     },
 
     // 이메일 (고유값)
     email: {
       type: String,
-      required: true,
+      required: [true, "이메일은 필수 항목입니다."],
       unique: true,
       lowercase: true,
       trim: true,
+      match: [/^\S+@\S+\.\S+$/, "유효한 이메일 형식이 아닙니다."],
     },
 
     // 비밀번호 (bcrypt로 해시)
     password: {
       type: String,
-      required: true,
-      minlength: 6,
+      required: [true, "비밀번호는 필수 항목입니다."],
+      minlength: [6, "비밀번호는 최소 6자 이상이어야 합니다."],
     },
 
     // 사용자 역할 (student, tutor, admin)
     role: {
       type: String,
       enum: ["student", "tutor", "admin"],
-      default: "student", // 기본값
+      default: "student",
       required: true,
     },
 
@@ -62,10 +63,10 @@ const userSchema = new mongoose.Schema(
 // 🔐 비밀번호 해시 미들웨어
 // ---------------------------
 userSchema.pre("save", async function (next) {
-  // 비밀번호가 수정되지 않았다면 그냥 넘김
-  if (!this.isModified("password")) return next();
-
   try {
+    // 비밀번호가 수정되지 않았다면 그냥 넘김
+    if (!this.isModified("password")) return next();
+
     const salt = await bcrypt.genSalt(10); // 솔트 생성
     this.password = await bcrypt.hash(this.password, salt); // 해시 적용
     next();
@@ -82,6 +83,18 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 };
 
 // ---------------------------
+// ⚙️ unique 에러(중복 이메일) 핸들링
+// ---------------------------
+userSchema.post("save", function (error, doc, next) {
+  if (error.name === "MongoServerError" && error.code === 11000) {
+    next(new Error("이미 등록된 이메일입니다."));
+  } else {
+    next(error);
+  }
+});
+
+// ---------------------------
 // 🚀 모델 내보내기
 // ---------------------------
-module.exports = mongoose.model("User", userSchema);
+const User = mongoose.model("User", userSchema);
+module.exports = User;

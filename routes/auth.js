@@ -1,5 +1,4 @@
 const express = require("express");
-const router = express.Router();
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
@@ -8,6 +7,9 @@ const path = require("path");
 const nodemailer = require("nodemailer");
 const User = require("../models/User");
 const sendEmail = require("../utils/sendEmail");
+const { registerUser } = require("../controllers/authController");
+
+const router = express.Router();
 
 // -------------------------------
 // ⚙️ 환경 변수 설정
@@ -35,6 +37,8 @@ function generateToken(user) {
 // -------------------------------
 // 🧩 회원가입 API
 // -------------------------------
+router.post("/register", registerUser);
+
 router.post("/signup", async (req, res) => {
   try {
     const { email, password, full_name, role } = req.body;
@@ -43,19 +47,15 @@ router.post("/signup", async (req, res) => {
       return res.status(400).json({ detail: "모든 필드를 입력해 주세요." });
     }
 
-    // ✅ 이메일 소문자 통일
     const normalizedEmail = email.toLowerCase();
 
-    // ✅ 중복 이메일 확인
     const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(409).json({ detail: "이미 가입된 이메일입니다." });
     }
 
-    // ✅ 비밀번호 암호화
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ✅ 유저 생성
     const user = new User({
       email: normalizedEmail,
       password: hashedPassword,
@@ -65,7 +65,6 @@ router.post("/signup", async (req, res) => {
 
     await user.save();
 
-    // ✅ 환영 이메일 템플릿 불러오기
     const templatePath = path.join(__dirname, "../templates/welcome.html");
     let htmlContent = "";
 
@@ -80,7 +79,6 @@ router.post("/signup", async (req, res) => {
       `;
     }
 
-    // ✅ 이메일 발송 (오류 발생해도 회원가입은 성공 처리)
     try {
       const transporter = nodemailer.createTransport({
         service: "Gmail",
@@ -96,10 +94,8 @@ router.post("/signup", async (req, res) => {
       console.error("📧 이메일 발송 실패:", emailErr.message);
     }
 
-    // ✅ JWT 발급
     const token = generateToken(user);
 
-    // ✅ 최종 응답
     res.status(201).json({
       message: "회원가입 성공",
       token,
@@ -127,22 +123,18 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ detail: "이메일과 비밀번호를 입력해 주세요." });
     }
 
-    // ✅ 이메일 소문자 통일
     const normalizedEmail = email.toLowerCase();
 
-    // ✅ 유저 확인
     const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(400).json({ detail: "존재하지 않는 사용자입니다." });
     }
 
-    // ✅ 비밀번호 검증
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ detail: "비밀번호가 일치하지 않습니다." });
     }
 
-    // ✅ JWT 토큰 발급
     const token = generateToken(user);
 
     res.json({
@@ -175,7 +167,7 @@ router.post("/request-reset", async (req, res) => {
     }
 
     const token = crypto.randomBytes(32).toString("hex");
-    const expire = Date.now() + 1000 * 60 * 30; // 30분 유효
+    const expire = Date.now() + 1000 * 60 * 30; // 30분
 
     user.resetToken = token;
     user.resetTokenExpire = expire;
