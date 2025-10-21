@@ -38,14 +38,12 @@ router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // ✅ 1. 필수값 확인
     if (!email || !password) {
       return res
         .status(400)
         .json({ success: false, message: "이메일과 비밀번호를 모두 입력하세요." });
     }
 
-    // ✅ 2. 관리자 계정 확인
     const admin = await User.findOne({ email, role: "admin" });
     if (!admin) {
       return res
@@ -53,7 +51,6 @@ router.post("/login", async (req, res) => {
         .json({ success: false, message: "관리자 계정을 찾을 수 없습니다." });
     }
 
-    // ✅ 3. 비밀번호 일치 여부 확인
     const isMatch = await bcrypt.compare(password, admin.password);
     if (!isMatch) {
       return res
@@ -61,14 +58,12 @@ router.post("/login", async (req, res) => {
         .json({ success: false, message: "비밀번호가 일치하지 않습니다." });
     }
 
-    // ✅ 4. JWT 토큰 발급
     const token = jwt.sign(
       { id: admin._id, email: admin.email, role: admin.role },
       process.env.JWT_SECRET || "default_secret_key",
       { expiresIn: "2h" }
     );
 
-    // ✅ 5. 응답 전송
     res.json({
       success: true,
       message: "관리자 로그인 성공",
@@ -87,7 +82,7 @@ router.post("/login", async (req, res) => {
 });
 
 // ===================================================
-// 🔐 관리자 인증 미들웨어 (이후 모든 API 보호)
+// 🔐 관리자 인증 미들웨어 적용
 // ===================================================
 router.use(authenticateToken);
 router.use(authorizeRoles("admin"));
@@ -219,7 +214,6 @@ router.delete("/materials/:id", async (req, res) => {
     if (!material)
       return res.status(404).json({ success: false, message: "자료를 찾을 수 없습니다." });
 
-    // 파일도 삭제
     const filePath = path.join(__dirname, "..", material.fileUrl);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 

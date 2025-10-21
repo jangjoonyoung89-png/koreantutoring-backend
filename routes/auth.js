@@ -35,10 +35,8 @@ function generateToken(user) {
 }
 
 // -------------------------------
-// 🧩 회원가입 API
+// 🧩 회원가입 API (기존 컨트롤러 + 직접 라우트)
 // -------------------------------
-router.post("/register", registerUser);
-
 router.post("/signup", async (req, res) => {
   try {
     const { email, password, full_name, role } = req.body;
@@ -49,13 +47,16 @@ router.post("/signup", async (req, res) => {
 
     const normalizedEmail = email.toLowerCase();
 
+    // 이미 가입된 사용자 확인
     const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(409).json({ detail: "이미 가입된 이메일입니다." });
     }
 
+    // 비밀번호 암호화
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // 새 사용자 생성
     const user = new User({
       email: normalizedEmail,
       password: hashedPassword,
@@ -65,6 +66,7 @@ router.post("/signup", async (req, res) => {
 
     await user.save();
 
+    // 환영 이메일 템플릿 로드
     const templatePath = path.join(__dirname, "../templates/welcome.html");
     let htmlContent = "";
 
@@ -79,6 +81,7 @@ router.post("/signup", async (req, res) => {
       `;
     }
 
+    // 이메일 발송 시도
     try {
       const transporter = nodemailer.createTransport({
         service: "Gmail",
@@ -94,6 +97,7 @@ router.post("/signup", async (req, res) => {
       console.error("📧 이메일 발송 실패:", emailErr.message);
     }
 
+    // 토큰 생성
     const token = generateToken(user);
 
     res.status(201).json({
@@ -130,6 +134,7 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ detail: "존재하지 않는 사용자입니다." });
     }
 
+    // 비밀번호 비교
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ detail: "비밀번호가 일치하지 않습니다." });
@@ -167,7 +172,7 @@ router.post("/request-reset", async (req, res) => {
     }
 
     const token = crypto.randomBytes(32).toString("hex");
-    const expire = Date.now() + 1000 * 60 * 30; // 30분
+    const expire = Date.now() + 1000 * 60 * 30; // 30분 유효
 
     user.resetToken = token;
     user.resetTokenExpire = expire;
