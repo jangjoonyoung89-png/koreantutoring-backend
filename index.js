@@ -93,7 +93,6 @@ io.on("connection", (socket) => {
   socket.on("join-room", ({ roomId, userId }) => {
     socket.join(roomId);
     console.log(`📺 유저 ${userId}가 룸 ${roomId} 입장`);
-
     socket.to(roomId).emit("user-connected", userId);
 
     // WebRTC 시그널 전달

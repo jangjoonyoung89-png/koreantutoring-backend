@@ -1,7 +1,8 @@
 const express = require("express");
-const router = express.Router();
 const QA = require("../models/QA");
 const { authenticateToken, requireRole } = require("../middleware/auth");
+
+const router = express.Router();
 
 // 모든 Q&A 목록 불러오기 (관리자 전용)
 router.get("/", authenticateToken, requireRole("admin"), async (req, res) => {

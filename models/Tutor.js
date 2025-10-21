@@ -43,4 +43,4 @@ const tutorSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("Tutor", tutorSchema);
+module.exports = mongoose.models.Tutor || mongoose.model("Tutor", tutorSchema);

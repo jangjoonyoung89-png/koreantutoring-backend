@@ -14,4 +14,5 @@ const MaterialSchema = new mongoose.Schema(
   { timestamps: true } // createdAt, updatedAt 자동 생성
 );
 
-module.exports = mongoose.model("Material", MaterialSchema);
+const Material = mongoose.models.Material || mongoose.model("Material", MaterialSchema);
+module.exports = Material;

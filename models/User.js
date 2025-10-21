@@ -6,14 +6,12 @@ const bcrypt = require("bcrypt");
 // ---------------------------
 const userSchema = new mongoose.Schema(
   {
-    // 사용자 이름
     full_name: {
       type: String,
       required: [true, "이름은 필수 항목입니다."],
       trim: true,
     },
 
-    // 이메일 (고유값)
     email: {
       type: String,
       required: [true, "이메일은 필수 항목입니다."],
@@ -23,14 +21,12 @@ const userSchema = new mongoose.Schema(
       match: [/^\S+@\S+\.\S+$/, "유효한 이메일 형식이 아닙니다."],
     },
 
-    // 비밀번호 (bcrypt로 해시)
     password: {
       type: String,
       required: [true, "비밀번호는 필수 항목입니다."],
       minlength: [6, "비밀번호는 최소 6자 이상이어야 합니다."],
     },
 
-    // 사용자 역할 (student, tutor, admin)
     role: {
       type: String,
       enum: ["student", "tutor", "admin"],
@@ -38,13 +34,11 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
 
-    // 튜터 인증 여부
     tutorVerified: {
       type: Boolean,
       default: false,
     },
 
-    // 비밀번호 재설정 토큰 및 만료 시간
     resetToken: {
       type: String,
       default: null,
@@ -55,7 +49,7 @@ const userSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: true, // 생성일, 수정일 자동 기록
+    timestamps: true,
   }
 );
 
@@ -64,11 +58,10 @@ const userSchema = new mongoose.Schema(
 // ---------------------------
 userSchema.pre("save", async function (next) {
   try {
-    // 비밀번호가 수정되지 않았다면 그냥 넘김
     if (!this.isModified("password")) return next();
 
-    const salt = await bcrypt.genSalt(10); // 솔트 생성
-    this.password = await bcrypt.hash(this.password, salt); // 해시 적용
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
     next();
   } catch (err) {
     next(err);
@@ -94,7 +87,7 @@ userSchema.post("save", function (error, doc, next) {
 });
 
 // ---------------------------
-// 🚀 모델 내보내기
+// 🚀 모델 내보내기 (CommonJS)
 // ---------------------------
 const User = mongoose.model("User", userSchema);
 module.exports = User;
