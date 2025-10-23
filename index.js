@@ -1,4 +1,11 @@
-require("dotenv").config();
+const dotenv = require("dotenv");
+dotenv.config({
+  path: process.env.NODE_ENV === "production" ? ".env.production" : ".env.development",
+});
+
+console.log("✅ Loaded environment:", process.env.NODE_ENV);
+console.log("✅ FRONTEND_URL:", process.env.FRONTEND_URL);
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -13,7 +20,7 @@ const app = express();
 const server = http.createServer(app);
 
 /** ======================
- * i18n 다국어 설정
+ * 🌏 i18n 다국어 설정
  * ====================== */
 i18n.configure({
   locales: ["ko", "en"],
@@ -33,7 +40,7 @@ app.use((req, res, next) => {
 });
 
 /** ======================
- * CORS 설정
+ * 🧩 CORS 설정
  * ====================== */
 const allowedOrigins = [
   process.env.FRONTEND_URL,
@@ -61,7 +68,7 @@ app.use(
 );
 
 /** ======================
- * 기본 미들웨어
+ * ⚙️ 기본 미들웨어
  * ====================== */
 app.use(express.json());
 app.use(morgan("dev"));
@@ -71,13 +78,13 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/videos", express.static(path.join(__dirname, "uploads/videos")));
 
 // ===========================
-// 업로드 폴더 자동 생성
+// 📁 업로드 폴더 자동 생성
 // ===========================
 const uploadDir = "uploads/videos";
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 /** ======================
- * Socket.io 설정 (실시간 수업)
+ * 🔌 Socket.io 설정 (실시간 수업)
  * ====================== */
 const io = new Server(server, {
   cors: {
@@ -108,49 +115,7 @@ io.on("connection", (socket) => {
 });
 
 /** ======================
- * 샘플 튜터 데이터
- * ====================== */
-const sampleTutors = [
-  {
-    _id: "sample1",
-    name: "장준영",
-    bio: "한국어 교육 전문가입니다.",
-    price: 30000,
-    photo: "https://tinyurl.com/lego1",
-    email: "sample1@test.com",
-    approved: true,
-    averageRating: 4.5,
-    reviewCount: 10,
-    sampleVideos: [],
-  },
-  {
-    _id: "sample2",
-    name: "장서은",
-    bio: "비즈니스 한국어 전문 튜터입니다.",
-    price: 35000,
-    photo: "https://tinyurl.com/lego2",
-    email: "sample2@test.com",
-    approved: true,
-    averageRating: 4.7,
-    reviewCount: 8,
-    sampleVideos: [],
-  },
-  {
-    _id: "sample3",
-    name: "김수영",
-    bio: "회화 중심 수업을 제공합니다.",
-    price: 28000,
-    photo: "https://tinyurl.com/lego3",
-    email: "sample3@test.com",
-    approved: true,
-    averageRating: 4.8,
-    reviewCount: 12,
-    sampleVideos: [],
-  },
-];
-
-/** ======================
- * 모델 불러오기
+ * 🧱 모델 불러오기
  * ====================== */
 const Tutor = require("./models/Tutor");
 const Review = require("./models/Review");
@@ -158,12 +123,12 @@ const Booking = require("./models/Booking");
 const Material = require("./models/Material");
 
 /** ======================
- * 미들웨어 불러오기
+ * 🔐 미들웨어 불러오기
  * ====================== */
 const { authenticateToken, authorizeRoles } = require("./middleware/auth");
 
 /** ======================
- * 라우터 불러오기
+ * 🚦 라우터 불러오기
  * ====================== */
 const tutorRoutes = require("./routes/tutors");
 const bookingRoutes = require("./routes/booking");
@@ -179,11 +144,52 @@ const adminRoutes = require("./routes/admin");
 const materialBoardRoutes = require("./routes/materialBoard");
 const tutorVerificationRoutes = require("./routes/tutorVerification");
 const videosRoutes = require("./routes/videos");
-
-// 샘플 영상 + 업로드
+const adminQARoutes = require("./routes/adminQA");
 
 /** ======================
- * API 라우팅
+ * 👩‍🏫 샘플 튜터 데이터 (_id ObjectId로 수정)
+ * ====================== */
+const sampleTutors = [
+  {
+    _id: new mongoose.Types.ObjectId(),
+    name: "장준영",
+    bio: "한국어 교육 전문가입니다.",
+    price: 30000,
+    photo: "https://tinyurl.com/lego1",
+    email: "sample1@test.com",
+    approved: true,
+    averageRating: 4.5,
+    reviewCount: 10,
+    sampleVideos: [],
+  },
+  {
+    _id: new mongoose.Types.ObjectId(),
+    name: "장서은",
+    bio: "비즈니스 한국어 전문 튜터입니다.",
+    price: 35000,
+    photo: "https://tinyurl.com/lego2",
+    email: "sample2@test.com",
+    approved: true,
+    averageRating: 4.7,
+    reviewCount: 8,
+    sampleVideos: [],
+  },
+  {
+    _id: new mongoose.Types.ObjectId(),
+    name: "김수영",
+    bio: "회화 중심 수업을 제공합니다.",
+    price: 28000,
+    photo: "https://tinyurl.com/lego3",
+    email: "sample3@test.com",
+    approved: true,
+    averageRating: 4.8,
+    reviewCount: 12,
+    sampleVideos: [],
+  },
+];
+
+/** ======================
+ * 📡 API 라우팅
  * ====================== */
 app.use("/auth", authRoutes);
 app.use("/payments", paymentRoutes);
@@ -198,7 +204,7 @@ app.use("/admin", adminRoutes);
 app.use("/api/materials", materialBoardRoutes);
 app.use("/tutor-verification", tutorVerificationRoutes);
 app.use("/api/videos", videosRoutes);
-app.use("/api/admin/qa", require("./routes/adminQA"));
+app.use("/api/admin/qa", adminQARoutes);
 
 // tutors 라우트 → DB 연결 안 되면 샘플 데이터 반환
 let dbConnected = false;
@@ -215,7 +221,7 @@ app.use(
 );
 
 /** ======================
- * 예약 테스트용 API
+ * 🧭 예약 테스트용 API
  * ====================== */
 app.get("/api/tutors/:id/available-dates", (req, res) => {
   res.json(["2025-08-16", "2025-08-17", "2025-08-18"]);
@@ -232,21 +238,21 @@ app.post("/api/bookings", (req, res) => {
 });
 
 /** ======================
- * 튜터 전용 접근 예시
+ * 🔒 튜터 전용 접근 예시
  * ====================== */
 app.get("/tutor-only-data", authenticateToken, authorizeRoles("tutor"), (req, res) => {
   res.json({ message: "튜터 인증된 사용자만 접근 가능" });
 });
 
 /** ======================
- * 루트 라우트
+ * 🏠 루트 라우트
  * ====================== */
 app.get("/", (req, res) => {
   res.send("✅ Backend API is running 🚀");
 });
 
 /** ======================
- * MongoDB 연결 + 샘플 데이터 자동 삽입
+ * 💾 MongoDB 연결 + 샘플 데이터 자동 삽입
  * ====================== */
 mongoose
   .connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
@@ -273,6 +279,6 @@ mongoose
   });
 
 /** ======================
- * export
+ * 📤 export
  * ====================== */
 module.exports = { app, server, sampleTutors, Tutor };
