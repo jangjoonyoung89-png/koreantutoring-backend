@@ -5,12 +5,14 @@ const path = require("path");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 
 const Tutor = require("../models/Tutor");
 const Review = require("../models/Review");
 const Booking = require("../models/Booking");
 const Material = require("../models/Material");
 const User = require("../models/User");
+const sendEmail = require("../utils/sendEmail"); // ✅ 이메일 전송 유틸
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
 // ===================================================
@@ -77,6 +79,82 @@ router.post("/login", async (req, res) => {
     });
   } catch (err) {
     console.error("❌ 관리자 로그인 오류:", err);
+    res.status(500).json({ success: false, message: "서버 오류가 발생했습니다." });
+  }
+});
+
+// ===================================================
+// 📧 관리자 비밀번호 재설정 요청
+// ===================================================
+router.post("/forgot-password", async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const admin = await User.findOne({ email, role: "admin" });
+    if (!admin) {
+      return res.status(404).json({ success: false, message: "인증 정보가 없습니다." });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+
+    admin.resetPasswordToken = resetTokenHash;
+    admin.resetPasswordExpires = Date.now() + 3600000; // 1시간
+    await admin.save();
+
+    const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+    const resetLink = `${FRONTEND_URL}/admin/reset-password/${resetToken}`;
+
+    const subject = "코리안튜터링 관리자 비밀번호 재설정 안내";
+    const html = `
+      <p>안녕하세요, 관리자님.</p>
+      <p>비밀번호를 재설정하려면 아래 링크를 클릭하세요:</p>
+      <a href="${resetLink}" target="_blank">${resetLink}</a>
+      <p>이 링크는 1시간 후 만료됩니다.</p>
+    `;
+
+    await sendEmail(admin.email, subject, html);
+
+    res.json({ success: true, message: "재설정 링크를 이메일로 전송했습니다." });
+  } catch (err) {
+    console.error("관리자 비밀번호 재설정 오류:", err);
+    res.status(500).json({ success: false, message: "서버 오류가 발생했습니다." });
+  }
+});
+
+// ===================================================
+// 🔑 관리자 비밀번호 실제 재설정
+// ===================================================
+router.post("/reset-password/:token", async (req, res) => {
+  const { token } = req.params;
+  const { password } = req.body;
+
+  try {
+    const resetTokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const admin = await User.findOne({
+      resetPasswordToken: resetTokenHash,
+      resetPasswordExpires: { $gt: Date.now() },
+      role: "admin",
+    });
+
+    if (!admin) {
+      return res.status(400).json({
+        success: false,
+        message: "토큰이 유효하지 않거나 만료되었습니다.",
+      });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    admin.password = await bcrypt.hash(password, salt);
+
+    admin.resetPasswordToken = undefined;
+    admin.resetPasswordExpires = undefined;
+    await admin.save();
+
+    res.json({ success: true, message: "비밀번호가 성공적으로 재설정되었습니다." });
+  } catch (err) {
+    console.error("관리자 비밀번호 변경 오류:", err);
     res.status(500).json({ success: false, message: "서버 오류가 발생했습니다." });
   }
 });
