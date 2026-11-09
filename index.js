@@ -44,10 +44,10 @@ app.use((req, res, next) => {
  * ====================== */
 const allowedOrigins = [
   process.env.FRONTEND_URL,
-  "https://www.koreantutoring-backend.onrender.com",
-  "https://www.koreantutoring-frontend.onrender.com",
-  "https://api.koreantutoring.co.kr",
-  "https://www.koreantutoring.co.kr",
+  "https://www.rokmun.com",
+  "https://rokmun.com",
+  "https://koreantutoring-frontend.onrender.com",
+  "https://koreantutoring-backend.onrender.com",
   "http://localhost:3000",
   "http://localhost:3002",
   "http://127.0.0.1:3000",
