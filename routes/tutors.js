@@ -473,6 +473,159 @@ router.get("/:id/availability", async (req, res) => {
 });
 
 // ----------------------
+// ⭐ 날짜별 실제 수업 가능 시간 조회
+// 예약 대기 및 확정 시간은 예약 마감 처리
+// ----------------------
+router.get("/:id/available-slots", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { date } = req.query;
+
+    // 최신 예약 정보를 반환하도록 캐시 방지
+    res.set("Cache-Control", "no-store");
+
+    // 튜터 ID 확인
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({
+        message: "유효하지 않은 튜터 ID입니다.",
+      });
+    }
+
+    // 날짜 형식 확인
+    if (
+      typeof date !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(date)
+    ) {
+      return res.status(400).json({
+        message: "올바른 날짜를 선택해 주세요.",
+      });
+    }
+
+    const selectedDate = new Date(
+      `${date}T00:00:00Z`
+    );
+
+    if (
+      Number.isNaN(selectedDate.getTime()) ||
+      selectedDate.toISOString().slice(0, 10) !== date
+    ) {
+      return res.status(400).json({
+        message: "유효하지 않은 날짜입니다.",
+      });
+    }
+
+    // 승인된 튜터만 조회
+    const tutor = await Tutor.findOne({
+      _id: id,
+      approved: true,
+      rejected: { $ne: true },
+    })
+      .select("availableTimes")
+      .lean();
+
+    if (!tutor) {
+      return res.status(404).json({
+        message: "예약 가능한 튜터가 아닙니다.",
+      });
+    }
+
+    // 선택한 날짜의 요일 확인
+    const dayNames = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+
+    const day =
+      dayNames[selectedDate.getUTCDay()];
+
+    // 튜터가 설정한 해당 요일의 수업 시간
+    const scheduledSlots = [
+      ...new Set(
+        (tutor.availableTimes || [])
+          .filter((item) => item.day === day)
+          .flatMap((item) => item.slots || [])
+      ),
+    ].sort();
+
+    // 해당 날짜의 실제 예약 조회
+    // 취소된 예약은 제외
+    const bookings = await Booking.find({
+      tutor: id,
+      date,
+      status: { $ne: "canceled" },
+    })
+      .select("time -_id")
+      .lean();
+
+    // 이미 예약된 시간
+    const bookedSet = new Set(
+      bookings.map((booking) => booking.time)
+    );
+
+    // 한국 시간 기준 현재 시각
+    const now = Date.now();
+
+    // 시간별 예약 가능 여부 계산
+    const slots = scheduledSlots.map((time) => {
+      const isBooked = bookedSet.has(time);
+
+      const slotTime = new Date(
+        `${date}T${time}:00+09:00`
+      ).getTime();
+
+      const isPast = slotTime <= now;
+
+      return {
+        time,
+        available: !isBooked && !isPast,
+        booked: isBooked,
+        past: isPast,
+        status: isBooked
+          ? "booked"
+          : isPast
+          ? "past"
+          : "available",
+      };
+    });
+
+    // 예약 가능한 시간
+    const availableSlots = slots
+      .filter((slot) => slot.available)
+      .map((slot) => slot.time);
+
+    // 예약 마감 시간
+    const bookedSlots = slots
+      .filter((slot) => slot.booked)
+      .map((slot) => slot.time);
+
+    // 날짜별 실제 예약 정보 반환
+    res.json({
+      tutorId: id,
+      date,
+      day,
+      slots,
+      availableSlots,
+      bookedSlots,
+    });
+  } catch (err) {
+    console.error(
+      "❌ 날짜별 수업 가능 시간 조회 실패:",
+      err
+    );
+
+    res.status(500).json({
+      message:
+        "수업 가능 시간을 불러오지 못했습니다.",
+    });
+  }
+});
+
+// ----------------------
 // 튜터 가능 시간 업데이트
 // ----------------------
 router.patch(
