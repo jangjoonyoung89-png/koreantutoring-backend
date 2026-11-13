@@ -1,88 +1,462 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
+
 const Booking = require("../models/Booking");
-// 인증 미들웨어 필요 시 아래 주석 해제 후 사용
-// const { authenticateToken } = require("../middleware/auth");
-const sendNotification = require("../utils/sendNotification"); // 알림 함수 임포트
+const Tutor = require("../models/Tutor");
 
-// ======================
-// 예약 목록 조회
-// studentId, tutorId 필터 가능
-// ======================
-router.get("/", /*authenticateToken,*/ async (req, res) => {
-  const { studentId, tutorId } = req.query;
-  const filter = {};
-  if (studentId) filter.student = studentId;
-  if (tutorId) filter.tutor = tutorId;
+const {
+  authenticateToken,
+  authorizeRoles,
+} = require("../middleware/auth");
 
-  try {
-    const bookings = await Booking.find(filter)
-      .populate("tutor", "full_name email")
-      .populate("student", "full_name email")
-      .sort({ date: 1, time: 1 });
+const sendNotification = require("../utils/sendNotification");
 
-    res.json(bookings);
-  } catch (err) {
-    console.error("예약 목록 조회 실패:", err);
-    res.status(500).json({ detail: "서버 오류" });
-  }
-});
+// ==============================
+// 공통 함수
+// ==============================
+const getUserId = (req) => {
+  return req.user?.id || req.user?._id;
+};
 
-// ======================
-// 예약 삭제 (취소)
-// ======================
-router.delete("/:id", /*authenticateToken,*/ async (req, res) => {
-  try {
-    const booking = await Booking.findByIdAndDelete(req.params.id);
-    if (!booking) {
-      return res.status(404).json({ detail: "예약을 찾을 수 없습니다." });
+const isValidId = (id) => {
+  return mongoose.Types.ObjectId.isValid(id);
+};
+
+// 로그인한 튜터의 실제 프로필 조회
+const getTutorProfile = async (req) => {
+  return Tutor.findOne({
+    userId: getUserId(req),
+  });
+};
+
+// ==============================
+// 1. 예약 목록 조회
+// GET /bookings
+// ==============================
+router.get(
+  "/",
+  authenticateToken,
+  authorizeRoles("student", "tutor", "admin"),
+  async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const role = req.user.role;
+      const filter = {};
+
+      // 학습자는 자신의 예약만 조회
+      if (role === "student") {
+        filter.student = userId;
+      }
+
+      // 튜터는 자신의 수업 예약만 조회
+      if (role === "tutor") {
+        const tutor = await getTutorProfile(req);
+
+        if (!tutor) {
+          return res.status(404).json({
+            message: "튜터 프로필을 찾을 수 없습니다.",
+          });
+        }
+
+        filter.tutor = tutor._id;
+      }
+
+      // 관리자는 전체 예약 및 필터 조회 가능
+      if (role === "admin") {
+        const { studentId, tutorId } = req.query;
+
+        if (studentId) {
+          if (!isValidId(studentId)) {
+            return res.status(400).json({
+              message: "올바르지 않은 학습자 ID입니다.",
+            });
+          }
+
+          filter.student = studentId;
+        }
+
+        if (tutorId) {
+          if (!isValidId(tutorId)) {
+            return res.status(400).json({
+              message: "올바르지 않은 튜터 ID입니다.",
+            });
+          }
+
+          filter.tutor = tutorId;
+        }
+      }
+
+      const bookings = await Booking.find(filter)
+        .populate("tutor", "name photo price")
+        .populate("student", "full_name")
+        .sort({ date: 1, time: 1 });
+
+      return res.json(bookings);
+    } catch (err) {
+      console.error("예약 목록 조회 실패:", err);
+
+      return res.status(500).json({
+        message: "예약 목록을 불러오지 못했습니다.",
+      });
     }
-    res.json({ message: "예약이 취소되었습니다." });
-  } catch (err) {
-    console.error("예약 취소 실패:", err);
-    res.status(500).json({ detail: "서버 오류" });
   }
-});
+);
 
-// ======================
-// 예약 생성
-// ======================
-router.post("/", /*authenticateToken,*/ async (req, res) => {
-  const { student, tutor, date, time, notes } = req.body;
+// ==============================
+// 2. 튜터 예약 확정
+// PATCH /bookings/:id/confirm
+// ==============================
+router.patch(
+  "/:id/confirm",
+  authenticateToken,
+  authorizeRoles("tutor"),
+  async (req, res) => {
+    try {
+      const bookingId = req.params.id;
 
-  if (!student || !tutor || !date || !time) {
-    return res.status(400).json({ detail: "필수 정보를 모두 입력해 주세요." });
-  }
+      if (!isValidId(bookingId)) {
+        return res.status(400).json({
+          message: "올바르지 않은 예약 ID입니다.",
+        });
+      }
 
-  try {
-    // 예약 시간 중복 체크 (같은 튜터)
-    const existing = await Booking.findOne({ tutor, date, time });
-    if (existing) {
-      return res.status(409).json({ detail: "이미 해당 시간에 예약이 존재합니다." });
+      const tutor = await getTutorProfile(req);
+
+      if (!tutor) {
+        return res.status(404).json({
+          message: "튜터 프로필을 찾을 수 없습니다.",
+        });
+      }
+
+      if (!tutor.approved || tutor.rejected) {
+        return res.status(403).json({
+          message: "승인된 튜터만 예약을 확정할 수 있습니다.",
+        });
+      }
+
+      // 본인의 대기 중인 예약만 확정
+      const booking = await Booking.findOneAndUpdate(
+        {
+          _id: bookingId,
+          tutor: tutor._id,
+          status: "pending",
+        },
+        {
+          $set: { status: "confirmed" },
+        },
+        {
+          new: true,
+          runValidators: true,
+        }
+      )
+        .populate("tutor", "name photo price")
+        .populate("student", "full_name");
+
+      if (!booking) {
+        return res.status(409).json({
+          message:
+            "확정할 수 없는 예약입니다. 예약 상태를 확인해 주세요.",
+        });
+      }
+
+      return res.json({
+        message: "수업 예약이 확정되었습니다.",
+        booking,
+      });
+    } catch (err) {
+      console.error("예약 확정 실패:", err);
+
+      return res.status(500).json({
+        message: "예약 확정 중 오류가 발생했습니다.",
+      });
     }
-
-    // 동일 학생, 튜터, 날짜 및 시간 중복 체크 (중복 예약 방지)
-    const duplicate = await Booking.findOne({ student, tutor, date, time });
-    if (duplicate) {
-      return res.status(409).json({ detail: "이미 동일한 수업이 예약되어 있습니다." });
-    }
-
-    const booking = new Booking({ student, tutor, date, time, notes });
-    await booking.save();
-
-    // 예약 성공 시 튜터에게 알림 전송
-    await sendNotification({
-      recipientId: tutor,
-      message: `새 예약이 들어왔습니다: ${date} ${time}`,
-      type: "booking",
-      link: `/tutor/bookings/${booking._id}`, // 프론트에서 이 링크로 상세 페이지 이동 가능
-    });
-
-    res.status(201).json({ message: "예약이 완료되었습니다.", booking });
-  } catch (err) {
-    console.error("예약 오류:", err);
-    res.status(500).json({ detail: "서버 오류" });
   }
-});
+);
+
+// ==============================
+// 3. 튜터 예약 거절
+// PATCH /bookings/:id/reject
+// ==============================
+router.patch(
+  "/:id/reject",
+  authenticateToken,
+  authorizeRoles("tutor"),
+  async (req, res) => {
+    try {
+      const bookingId = req.params.id;
+
+      if (!isValidId(bookingId)) {
+        return res.status(400).json({
+          message: "올바르지 않은 예약 ID입니다.",
+        });
+      }
+
+      const tutor = await getTutorProfile(req);
+
+      if (!tutor) {
+        return res.status(404).json({
+          message: "튜터 프로필을 찾을 수 없습니다.",
+        });
+      }
+
+      if (!tutor.approved || tutor.rejected) {
+        return res.status(403).json({
+          message: "승인된 튜터만 예약을 처리할 수 있습니다.",
+        });
+      }
+
+      // 본인의 대기 중인 예약만 거절
+      const booking = await Booking.findOneAndUpdate(
+        {
+          _id: bookingId,
+          tutor: tutor._id,
+          status: "pending",
+        },
+        {
+          $set: { status: "canceled" },
+        },
+        {
+          new: true,
+          runValidators: true,
+        }
+      )
+        .populate("tutor", "name photo price")
+        .populate("student", "full_name");
+
+      if (!booking) {
+        return res.status(409).json({
+          message:
+            "거절할 수 없는 예약입니다. 예약 상태를 확인해 주세요.",
+        });
+      }
+
+      return res.json({
+        message: "수업 예약이 거절되었습니다.",
+        booking,
+      });
+    } catch (err) {
+      console.error("예약 거절 실패:", err);
+
+      return res.status(500).json({
+        message: "예약 거절 중 오류가 발생했습니다.",
+      });
+    }
+  }
+);
+
+// ==============================
+// 4. 학습자 예약 취소
+// DELETE /bookings/:id
+// ==============================
+router.delete(
+  "/:id",
+  authenticateToken,
+  authorizeRoles("student", "admin"),
+  async (req, res) => {
+    try {
+      const bookingId = req.params.id;
+
+      if (!isValidId(bookingId)) {
+        return res.status(400).json({
+          message: "올바르지 않은 예약 ID입니다.",
+        });
+      }
+
+      const filter = {
+        _id: bookingId,
+        status: { $in: ["pending", "confirmed"] },
+      };
+
+      // 학습자는 본인의 예약만 취소 가능
+      if (req.user.role === "student") {
+        filter.student = getUserId(req);
+      }
+
+      // 예약 기록을 삭제하지 않고 상태만 변경
+      const booking = await Booking.findOneAndUpdate(
+        filter,
+        {
+          $set: { status: "canceled" },
+        },
+        {
+          new: true,
+          runValidators: true,
+        }
+      );
+
+      if (!booking) {
+        return res.status(404).json({
+          message: "취소할 수 있는 예약을 찾지 못했습니다.",
+        });
+      }
+
+      return res.json({
+        message: "예약이 취소되었습니다.",
+        booking,
+      });
+    } catch (err) {
+      console.error("예약 취소 실패:", err);
+
+      return res.status(500).json({
+        message: "예약 취소 중 오류가 발생했습니다.",
+      });
+    }
+  }
+);
+
+// ==============================
+// 5. 학습자 예약 생성
+// POST /bookings
+// ==============================
+router.post(
+  "/",
+  authenticateToken,
+  authorizeRoles("student"),
+  async (req, res) => {
+    try {
+      const student = getUserId(req);
+
+      const {
+        tutor,
+        tutorId,
+        date,
+        time,
+        notes,
+      } = req.body;
+
+      // 기존 프론트엔드 요청 형식 호환
+      const selectedTutorId = tutor || tutorId;
+
+      if (
+        !isValidId(student) ||
+        !isValidId(selectedTutorId) ||
+        typeof date !== "string" ||
+        typeof time !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+        !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)
+      ) {
+        return res.status(400).json({
+          message: "예약 정보를 올바르게 입력해 주세요.",
+        });
+      }
+
+      // 날짜 유효성 확인
+      const selectedDate = new Date(
+        `${date}T00:00:00Z`
+      );
+
+      if (
+        Number.isNaN(selectedDate.getTime()) ||
+        selectedDate.toISOString().slice(0, 10) !== date
+      ) {
+        return res.status(400).json({
+          message: "올바른 수업 날짜를 선택해 주세요.",
+        });
+      }
+
+      // 한국 시간 기준으로 지난 시간 예약 방지
+      const lessonStart = new Date(
+        `${date}T${time}:00+09:00`
+      );
+
+      if (lessonStart.getTime() <= Date.now()) {
+        return res.status(400).json({
+          message: "이미 지난 시간은 예약할 수 없습니다.",
+        });
+      }
+
+      // 승인된 튜터인지 확인
+      const tutorProfile = await Tutor.findOne({
+        _id: selectedTutorId,
+        approved: true,
+        rejected: { $ne: true },
+      });
+
+      if (!tutorProfile) {
+        return res.status(404).json({
+          message: "예약 가능한 튜터를 찾지 못했습니다.",
+        });
+      }
+
+      // 요일별 수업 가능 시간 확인
+      const daysOfWeek = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+      ];
+
+      const day = daysOfWeek[
+        selectedDate.getUTCDay()
+      ];
+
+      const dayAvailability =
+        tutorProfile.availableTimes?.find(
+          (item) => item.day === day
+        );
+
+      if (!dayAvailability?.slots?.includes(time)) {
+        return res.status(400).json({
+          message: "튜터가 설정한 수업 가능 시간이 아닙니다.",
+        });
+      }
+
+      // 취소된 예약을 제외하고 중복 확인
+      const existing = await Booking.findOne({
+        tutor: tutorProfile._id,
+        date,
+        time,
+        status: { $ne: "canceled" },
+      });
+
+      if (existing) {
+        return res.status(409).json({
+          message: "이미 예약된 시간입니다.",
+        });
+      }
+
+      const booking = await Booking.create({
+        student,
+        tutor: tutorProfile._id,
+        date,
+        time,
+        notes: typeof notes === "string" ? notes : "",
+        status: "pending",
+      });
+
+      // 알림 실패가 예약 성공에 영향을 주지 않도록 분리
+      try {
+        if (tutorProfile.userId) {
+          await sendNotification({
+            recipientId: tutorProfile.userId,
+            message: `새 예약이 들어왔습니다: ${date} ${time}`,
+            type: "booking",
+            link: "/tutor/dashboard",
+          });
+        }
+      } catch (notificationError) {
+        console.error(
+          "예약 알림 전송 실패:",
+          notificationError.message
+        );
+      }
+
+      return res.status(201).json({
+        message: "수업 예약 신청이 완료되었습니다.",
+        booking,
+      });
+    } catch (err) {
+      console.error("예약 생성 실패:", err);
+
+      return res.status(500).json({
+        message: "예약 중 서버 오류가 발생했습니다.",
+      });
+    }
+  }
+);
 
 module.exports = router;
