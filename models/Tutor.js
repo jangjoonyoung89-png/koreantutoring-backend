@@ -2,45 +2,120 @@ const mongoose = require("mongoose");
 
 const tutorSchema = new mongoose.Schema(
   {
-    // ------------------------
-    // 기본 정보
-    // ------------------------
-    name: { type: String, required: true },   // 튜터 이름
-    bio: { type: String },                    // 자기소개
-    email: { type: String },                  // 이메일
-    photo: { type: String },                  // 프로필 사진 URL
-    price: { type: Number },                  // 시간당 요금
+    // ===================================================
+    // 👩‍🏫 기본 정보
+    // ===================================================
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
 
-    // ------------------------
-    // 수업 가능 시간
-    // ------------------------
+    bio: {
+      type: String,
+      default: "",
+    },
+
+    email: {
+      type: String,
+      lowercase: true,
+      trim: true,
+    },
+
+    photo: {
+      type: String,
+      default: "",
+    },
+
+    price: {
+      type: Number,
+      min: 0,
+    },
+
+    // ===================================================
+    // 📅 수업 가능 시간
+    // ===================================================
     availableTimes: [
       {
-        day: { type: String },                // 예: "Monday"
-        slots: [{ type: String }],            // 예: ["10:00", "14:00"]
+        day: {
+          type: String,
+        },
+
+        slots: [
+          {
+            type: String,
+          },
+        ],
       },
     ],
 
-    // ------------------------
-    // 승인 및 멀티미디어
-    // ------------------------
-    approved: { type: Boolean, default: false },    // 관리자 승인 여부
-    sampleVideoUrl: { type: String, default: "" },  // 샘플 동영상 URL
+    // ===================================================
+    // ✅ 관리자 승인 및 거절 상태
+    // ===================================================
+    approved: {
+      type: Boolean,
+      default: false,
+    },
 
-    // ------------------------
-    // 평점 / 리뷰
-    // ------------------------
-    averageRating: { type: Number, default: 0 },    // 평균 평점
-    reviewCount: { type: Number, default: 0 },      // 리뷰 개수
+    rejected: {
+      type: Boolean,
+      default: false,
+    },
 
-    // ------------------------
-    // 관계 (User와 연결)
-    // ------------------------
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    // ===================================================
+    // 🎬 샘플 동영상
+    // ===================================================
+    sampleVideoUrl: {
+      type: String,
+      default: "",
+    },
+
+    // ===================================================
+    // ⭐ 평점 및 리뷰
+    // ===================================================
+    averageRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+
+    reviewCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    // ===================================================
+    // 🔗 User 회원 계정 연결
+    // ===================================================
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   {
-    timestamps: true, // createdAt, updatedAt 자동 생성
+    timestamps: true,
   }
 );
 
-module.exports = mongoose.models.Tutor || mongoose.model("Tutor", tutorSchema);
+// ===================================================
+// 🛡️ 회원 계정별 튜터 프로필 중복 생성 방지
+// userId가 없는 기존 가상 튜터는 유지
+// ===================================================
+tutorSchema.index(
+  { userId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      userId: { $type: "objectId" },
+    },
+  }
+);
+
+// ===================================================
+// 🚀 모델 내보내기
+// ===================================================
+module.exports =
+  mongoose.models.Tutor ||
+  mongoose.model("Tutor", tutorSchema);
