@@ -488,4 +488,175 @@ router.post(
   }
 );
 
+// ==============================
+// 6. 튜터 수업 완료 처리
+// PATCH /bookings/:id/complete
+// ==============================
+router.patch(
+  "/:id/complete",
+  authenticateToken,
+  authorizeRoles("tutor"),
+  async (req, res) => {
+    try {
+      const bookingId = req.params.id;
+
+      // 1. 예약 ID 유효성 검사
+      if (!isValidId(bookingId)) {
+        return res.status(400).json({
+          message: "올바르지 않은 예약 ID입니다.",
+        });
+      }
+
+      // 2. 로그인한 튜터의 실제 프로필 조회
+      const tutor = await getTutorProfile(req);
+
+      if (!tutor) {
+        return res.status(404).json({
+          message: "튜터 프로필을 찾을 수 없습니다.",
+        });
+      }
+
+      // 3. 승인된 튜터만 수업 완료 가능
+      if (!tutor.approved || tutor.rejected) {
+        return res.status(403).json({
+          message:
+            "승인된 튜터만 수업을 완료 처리할 수 있습니다.",
+        });
+      }
+
+      // 4. 본인의 예약인지 확인
+      const existingBooking = await Booking.findOne({
+        _id: bookingId,
+        tutor: tutor._id,
+      });
+
+      if (!existingBooking) {
+        return res.status(404).json({
+          message:
+            "완료 처리할 수 있는 예약을 찾지 못했습니다.",
+        });
+      }
+
+      // 5. 이미 완료된 수업인지 확인
+      if (existingBooking.status === "completed") {
+        return res.status(409).json({
+          message: "이미 완료 처리된 수업입니다.",
+        });
+      }
+
+      // 6. 예약 확정 상태에서만 완료 가능
+      if (existingBooking.status !== "confirmed") {
+        return res.status(409).json({
+          message:
+            "예약이 확정된 수업만 완료 처리할 수 있습니다.",
+        });
+      }
+
+      // 7. 수업 날짜와 시간 유효성 확인
+      const { date, time } = existingBooking;
+
+      if (
+        typeof date !== "string" ||
+        typeof time !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+        !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)
+      ) {
+        return res.status(400).json({
+          message:
+            "수업 날짜 또는 시간 정보가 올바르지 않습니다.",
+        });
+      }
+
+      const selectedDate = new Date(
+        `${date}T00:00:00Z`
+      );
+
+      if (
+        Number.isNaN(selectedDate.getTime()) ||
+        selectedDate.toISOString().slice(0, 10) !== date
+      ) {
+        return res.status(400).json({
+          message: "수업 날짜 정보가 올바르지 않습니다.",
+        });
+      }
+
+      // 8. 한국 시간 기준 수업 시작 시각
+      const lessonStart = new Date(
+        `${date}T${time}:00+09:00`
+      ).getTime();
+
+      if (Number.isNaN(lessonStart)) {
+        return res.status(400).json({
+          message: "수업 시간 정보를 확인할 수 없습니다.",
+        });
+      }
+
+      // 9. 수업 종료 시각 계산
+      // 현재 ROKMUN 수업은 60분 기준
+      const LESSON_DURATION_MINUTES = 60;
+
+      const lessonEnd =
+        lessonStart +
+        LESSON_DURATION_MINUTES * 60 * 1000;
+
+      const now = new Date();
+
+      // 수업 종료 전에는 완료 처리 불가
+      if (now.getTime() < lessonEnd) {
+        return res.status(400).json({
+          message:
+            "수업이 종료된 후에 완료 처리할 수 있습니다.",
+          lessonEndAt: new Date(lessonEnd),
+        });
+      }
+
+      // 10. 수업 완료 처리
+      // 상태와 소유권을 다시 확인하여
+      // 동시 취소 또는 중복 완료 처리 방지
+      const booking = await Booking.findOneAndUpdate(
+        {
+          _id: bookingId,
+          tutor: tutor._id,
+          status: "confirmed",
+          date,
+          time,
+        },
+        {
+          $set: {
+            status: "completed",
+            completedAt: now,
+          },
+        },
+        {
+          new: true,
+          runValidators: true,
+        }
+      )
+        .populate("tutor", "name photo price")
+        .populate("student", "full_name");
+
+      if (!booking) {
+        return res.status(409).json({
+          message:
+            "예약 상태가 변경되었습니다. 다시 확인해 주세요.",
+        });
+      }
+
+      // 11. 수업 완료 성공 응답
+      return res.json({
+        message: "수업이 완료 처리되었습니다.",
+        booking,
+      });
+
+    } catch (err) {
+      console.error("수업 완료 처리 실패:", err);
+
+      return res.status(500).json({
+        message:
+          "수업 완료 처리 중 오류가 발생했습니다.",
+      });
+    }
+  }
+);
+
 module.exports = router;
