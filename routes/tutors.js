@@ -689,7 +689,8 @@ router.patch(
 );
 
 // ----------------------
-// 예약 생성
+// ⭐ 예약 생성
+// 동시 중복 예약 및 지난 시간 예약 방지
 // ----------------------
 router.post(
   "/bookings",
@@ -698,9 +699,12 @@ router.post(
   async (req, res) => {
     try {
       const { tutorId, date, time } = req.body;
+      const studentId = getUserId(req);
 
+      // 1. 예약 정보 유효성 검사
       if (
         !isValidObjectId(tutorId) ||
+        !isValidObjectId(studentId) ||
         typeof date !== "string" ||
         !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
         typeof time !== "string" ||
@@ -711,18 +715,7 @@ router.post(
         });
       }
 
-      const tutor = await Tutor.findOne({
-        _id: tutorId,
-        approved: true,
-        rejected: { $ne: true },
-      });
-
-      if (!tutor) {
-        return res.status(404).json({
-          message: "예약 가능한 튜터가 아닙니다.",
-        });
-      }
-
+      // 2. 실제 존재하는 날짜인지 확인
       const selectedDate = new Date(
         `${date}T00:00:00Z`
       );
@@ -736,6 +729,34 @@ router.post(
         });
       }
 
+      // 3. 한국 시간 기준 지난 시간 예약 방지
+      const bookingDateTime = new Date(
+        `${date}T${time}:00+09:00`
+      ).getTime();
+
+      if (
+        Number.isNaN(bookingDateTime) ||
+        bookingDateTime <= Date.now()
+      ) {
+        return res.status(400).json({
+          message: "이미 지난 시간은 예약할 수 없습니다.",
+        });
+      }
+
+      // 4. 승인된 튜터인지 확인
+      const tutor = await Tutor.findOne({
+        _id: tutorId,
+        approved: true,
+        rejected: { $ne: true },
+      });
+
+      if (!tutor) {
+        return res.status(404).json({
+          message: "예약 가능한 튜터가 아닙니다.",
+        });
+      }
+
+      // 5. 선택한 날짜의 요일 확인
       const dayNames = [
         "Sunday",
         "Monday",
@@ -746,13 +767,16 @@ router.post(
         "Saturday",
       ];
 
-      const day = dayNames[selectedDate.getUTCDay()];
+      const day =
+        dayNames[selectedDate.getUTCDay()];
 
+      // 6. 튜터가 설정한 수업 가능 시간 확인
       const available = (
         tutor.availableTimes || []
       ).some(
         (item) =>
           item.day === day &&
+          Array.isArray(item.slots) &&
           item.slots.includes(time)
       );
 
@@ -762,7 +786,8 @@ router.post(
         });
       }
 
-      // 취소되지 않은 예약만 중복 확인
+      // 7. 기존 예약 중복 확인
+      // 취소된 예약은 제외
       const exist = await Booking.findOne({
         tutor: tutorId,
         date,
@@ -776,22 +801,43 @@ router.post(
         });
       }
 
+      // 8. 예약 저장 직전 시간 재확인
+      if (bookingDateTime <= Date.now()) {
+        return res.status(400).json({
+          message: "이미 지난 시간은 예약할 수 없습니다.",
+        });
+      }
+
+      // 9. 예약 생성
+      // MongoDB 고유 인덱스가 동시 중복 예약 차단
       const booking = await Booking.create({
         tutor: tutorId,
-        student: getUserId(req),
+        student: studentId,
         date,
         time,
         status: "pending",
       });
 
-      res.status(201).json({
+      // 10. 예약 성공 응답
+      return res.status(201).json({
         message: "예약이 완료되었습니다.",
         booking,
       });
+
     } catch (err) {
+
+      // ⭐ MongoDB 동시 중복 예약 오류 처리
+      // 두 학습자가 동시에 같은 시간을 예약하면
+      // 먼저 저장된 예약만 성공합니다.
+      if (err.code === 11000) {
+        return res.status(409).json({
+          message: "이미 예약된 시간입니다.",
+        });
+      }
+
       console.error("❌ 예약 실패:", err);
 
-      res.status(500).json({
+      return res.status(500).json({
         message: "예약 처리에 실패했습니다.",
       });
     }
